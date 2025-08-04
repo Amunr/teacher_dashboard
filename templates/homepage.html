@@ -1,0 +1,259 @@
+{% extends "layout.html" %}
+
+{% block title %}Student Assessment Dashboard{% endblock %}
+
+{% block content %}
+<!-- Filters Section -->
+<div class="row mb-5">
+    <div class="col-12">
+        <div class="row g-4">
+            <div class="col-md-3 col-sm-6">
+                <select class="form-select form-select-lg border-warning border-3 rounded-4 shadow-sm" id="schoolFilter">
+                    <option selected>School</option>
+                    <option>School A</option>
+                    <option>School B</option>
+                    <option>School C</option>
+                </select>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <select class="form-select form-select-lg border-warning border-3 rounded-4 shadow-sm" id="gradeFilter">
+                    <option selected>Grade</option>
+                    <option>Grade 1</option>
+                    <option>Grade 2</option>
+                    <option>Grade 3</option>
+                </select>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <select class="form-select form-select-lg border-warning border-3 rounded-4 shadow-sm" id="assessmentFilter">
+                    <option selected>Assessment</option>
+                    <option>Mid-term</option>
+                    <option>Final</option>
+                    <option>Practice</option>
+                </select>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <select class="form-select form-select-lg border-warning border-3 rounded-4 shadow-sm" id="domainFilter">
+                    <option selected>Domain</option>
+                    <option>Language Development</option>
+                    <option>Cognitive Development</option>
+                    <option>Social and Emotional</option>
+                    <option>Physical Development</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- School Readiness Section -->
+<div class="row mb-5">
+    <div class="col-12">
+        <div class="card border-warning border-3 rounded-4 shadow-lg">
+            <div class="card-body p-5">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h4 class="card-title fw-bold">75% children who are school ready</h4>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="position-relative d-inline-block">
+                            <canvas id="readinessGauge" width="120" height="80"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Key Metrics Section -->
+<div class="row mb-5">
+    <div class="col-md-4 mb-4">
+        <div class="card border-dark border-3 rounded-4 shadow-lg h-100">
+            <div class="card-body p-4 text-center">
+                <h6 class="card-title fw-bold mb-3">A Total Students</h6>
+                <h2 class="text-primary fw-bold display-6">150</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card border-dark border-3 rounded-4 shadow-lg h-100">
+            <div class="card-body p-4 text-center">
+                <h6 class="card-title fw-bold mb-3">B Students assessed</h6>
+                <h2 class="text-success fw-bold display-6">142</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card border-dark border-3 rounded-4 shadow-lg h-100">
+            <div class="card-body p-4 text-center">
+                <h6 class="card-title fw-bold mb-3">C Class avg. score</h6>
+                <h2 class="text-info fw-bold display-6">78%</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Skills Overview Section -->
+<div class="row mb-5">
+    <div class="col-md-6 mb-4">
+        <div class="card border-success border-3 rounded-4 shadow-lg h-100">
+            <div class="card-body p-4">
+                <h6 class="card-title fw-bold mb-3">
+                    <i class="bi bi-lightbulb text-warning fs-4"></i> Glowing Skills
+                </h6>
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2 fw-semibold">• Skill 1 name</li>
+                    <li class="mb-2 fw-semibold">• Skill 2 name</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-4">
+        <div class="card border-danger border-3 rounded-4 shadow-lg h-100">
+            <div class="card-body p-4">
+                <h6 class="card-title fw-bold mb-3">
+                    <i class="bi bi-exclamation-triangle text-danger fs-4"></i> Growing Skills
+                </h6>
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2 fw-semibold">• Skill 1 name</li>
+                    <li class="mb-2 fw-semibold">• Skill 2 name</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart Section -->
+<div class="row mb-5">
+    <div class="col-12">
+        <div class="card border-3 rounded-4 shadow-lg">
+            <div class="card-body p-5">
+                <h4 class="card-title text-center fw-bold mb-5">Average Student Scores in Different Domains</h4>
+                <div class="chart-container bg-light rounded-4 p-4" style="position: relative; height:450px;">
+                    <canvas id="domainChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Student List Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card border-3 rounded-4 shadow-lg">
+            <div class="card-body p-5">
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <select class="form-select form-select-lg border-warning border-3 rounded-4 shadow-sm" id="studentFilter">
+                            <option selected>Student name</option>
+                            <option>John Doe</option>
+                            <option>Jane Smith</option>
+                            <option>Mike Johnson</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <div class="border border-2 rounded-4 p-5 text-center text-muted bg-light">
+                        <p class="mb-0 fs-5">Student list and their score per domain in different columns (can be scrolled to view all student data)</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Sample data for the charts
+const domainData = {
+    labels: ['Language Development (Kan)', 'Language Development (Eng)', 'Cognitive Development', 'Social and Emotional Development', 'Physical Development'],
+    datasets: [{
+        label: 'Average Score (%)',
+        data: [8, 12, 18, 20, 23],
+        backgroundColor: '#fd7e14',
+        borderColor: '#fd7e14',
+        borderWidth: 2,
+        borderRadius: 8
+    }]
+};
+
+// Chart configuration
+const chartConfig = {
+    type: 'bar',
+    data: domainData,
+    options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            x: {
+                beginAtZero: true,
+                max: 25,
+                title: {
+                    display: true,
+                    text: 'Average Score (in %)',
+                    font: {
+                        size: 14,
+                        weight: 'bold'
+                    }
+                },
+                grid: {
+                    color: 'rgba(0,0,0,0.1)'
+                }
+            },
+            y: {
+                title: {
+                    display: true,
+                    text: 'Domains of Development',
+                    font: {
+                        size: 14,
+                        weight: 'bold'
+                    }
+                },
+                grid: {
+                    color: 'rgba(0,0,0,0.1)'
+                }
+            }
+        }
+    }
+};
+
+// Initialize the horizontal bar chart
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('domainChart').getContext('2d');
+    new Chart(ctx, chartConfig);
+    
+    // Create readiness gauge
+    const gaugeCtx = document.getElementById('readinessGauge').getContext('2d');
+    const readinessData = {
+        labels: ['Ready', 'Not Ready'],
+        datasets: [{
+            data: [75, 25],
+            backgroundColor: ['#28a745', '#dc3545'],
+            borderWidth: 0,
+            borderRadius: 8
+        }]
+    };
+    
+    new Chart(gaugeCtx, {
+        type: 'doughnut',
+        data: readinessData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            cutout: '70%'
+        }
+    });
+});
+</script>
+{% endblock %} 
