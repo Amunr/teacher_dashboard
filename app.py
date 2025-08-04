@@ -10,4 +10,4 @@ if __name__ == '__main__':
 
 @app.route('/api/dashboard')
 def api():
-    
+    print("API called"	)
