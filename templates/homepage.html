@@ -386,9 +386,14 @@ function createSearchableDropdown(inputId, dropdownId, hiddenInputId, options, p
     // Handle option selection
     $(document).on('click', `#${dropdownId} .dropdown-item`, function() {
         const selectedValue = $(this).text();
+        console.log('Selected value:', selectedValue);
         $input.val(selectedValue);
         $hiddenInput.val(selectedValue);
         $dropdown.removeClass('show');
+        
+        // Trigger filter update when selection changes
+        console.log('Triggering filter update...');
+        updateDashboardWithFilters();
     });
     
     // Populate dropdown with options
@@ -449,6 +454,86 @@ function createSearchableDropdown(inputId, dropdownId, hiddenInputId, options, p
                 break;
         }
     });
+}
+
+// ========================================
+// FILTER UPDATE FUNCTION
+// ========================================
+function updateDashboardWithFilters() {
+    const selectedSchool = $('#selectedSchool').val();
+    const selectedGrade = $('#selectedGrade').val();
+    const selectedAssessment = $('#selectedAssessment').val();
+    const selectedDomain = $('#selectedDomain').val();
+    
+    console.log('Filter values:', { selectedSchool, selectedGrade, selectedAssessment, selectedDomain });
+    
+    // For now, we'll use the static data but simulate filtering
+    // In a real implementation, this would make an API call with the filter parameters
+    
+    // Simulate filtered data based on selections
+    let filteredData = { ...dashboardData };
+    
+    if (selectedSchool) {
+        console.log('School selected, updating data...');
+        // Simulate school-specific data
+        filteredData.metrics.readinessPercentage = Math.floor(Math.random() * 20) + 70; // 70-90%
+        filteredData.metrics.totalStudents = Math.floor(Math.random() * 50) + 100; // 100-150
+        filteredData.metrics.studentsAssessed = Math.floor(filteredData.metrics.totalStudents * 0.9); // 90% assessed
+        filteredData.metrics.classAvgScore = Math.floor(Math.random() * 15) + 75; // 75-90%
+        
+        // Update chart data to show some variation
+        filteredData.chartData.data = filteredData.chartData.data.map(() => 
+            Math.floor(Math.random() * 15) + 10 // 10-25 range
+        );
+        
+        console.log('Updated filtered data:', filteredData);
+    }
+    
+    if (selectedGrade) {
+        console.log('Grade selected, updating data...');
+        // Simulate grade-specific data
+        filteredData.metrics.readinessPercentage = Math.floor(Math.random() * 25) + 65; // 65-90%
+        filteredData.metrics.classAvgScore = Math.floor(Math.random() * 20) + 70; // 70-90%
+    }
+    
+    // Update the display with filtered data
+    console.log('Updating display with filtered data...');
+    updateMetricsDisplayWithData(filteredData);
+    updateChartDataWithData(filteredData);
+}
+
+function updateMetricsDisplayWithData(data) {
+    $('#readinessPercentage').text(data.metrics.readinessPercentage);
+    $('#totalStudents').text(data.metrics.totalStudents);
+    $('#studentsAssessed').text(data.metrics.studentsAssessed);
+    $('#classAvgScore').text(data.metrics.classAvgScore + '%');
+    
+    // Update glowing skills
+    const $glowingSkills = $('#glowingSkills');
+    $glowingSkills.empty();
+    data.skills.glowingSkills.forEach(skill => {
+        $glowingSkills.append(`<li class="mb-2 fw-semibold">• ${skill}</li>`);
+    });
+    
+    // Update growing skills
+    const $growingSkills = $('#growingSkills');
+    $growingSkills.empty();
+    data.skills.growingSkills.forEach(skill => {
+        $growingSkills.append(`<li class="mb-2 fw-semibold">• ${skill}</li>`);
+    });
+}
+
+function updateChartDataWithData(data) {
+    // Update chart with new data
+    console.log('Updating chart with data:', data.chartData);
+    if (window.domainChart) {
+        window.domainChart.data.labels = data.chartData.labels;
+        window.domainChart.data.datasets[0].data = data.chartData.data;
+        window.domainChart.update();
+        console.log('Chart updated successfully');
+    } else {
+        console.error('Chart not found!');
+    }
 }
 
 // ========================================
