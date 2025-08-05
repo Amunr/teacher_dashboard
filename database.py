@@ -101,3 +101,6 @@ def insert_response(json_data):
             values_list.append(row)
     if values_list:
         conn.execute(query,values_list)
+
+def insert_questions():
+    
