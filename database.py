@@ -18,7 +18,10 @@ questions = Table('questions', meta,
     Column('year_end', Date),    # Fixed
     Column('Domain', String),
     Column('SubDomain', String),
-    Column('Index_ID', Integer)
+    Column('Index_ID', Integer),
+    Column('Name', String),
+    Column("Date edited",  Date),
+    Column("layout_id", Integer)
 )
 
 responses = Table('responses', meta,
@@ -102,5 +105,3 @@ def insert_response(json_data):
     if values_list:
         conn.execute(query,values_list)
 
-def insert_questions():
-    
