@@ -8,9 +8,13 @@
     <div class="row mb-4">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center">
-                <h2 class="fw-bold text-primary">
-                    <i class="bi bi-eye me-2"></i>Layout Viewer
-                </h2>
+                <div>
+                    <h2 class="fw-bold text-primary mb-0">
+                        <i class="bi bi-eye me-2"></i>
+                        <span id="layoutNameHeader">Layout Viewer</span>
+                    </h2>
+                    <div class="text-muted small" id="layoutIdHeader"></div>
+                </div>
                 <button class="btn btn-warning btn-lg" onclick="window.location.href='/linkage/edit'">
                     <i class="bi bi-pencil-square me-2"></i>Edit Layout
                 </button>
@@ -72,8 +76,9 @@
 
 {% block extra_scripts %}
 <script>
+
 // ========================================
-// GLOBAL VARIABLES
+// GLOBALS
 // ========================================
 let layoutData = {
     domains: [],
@@ -81,69 +86,72 @@ let layoutData = {
 };
 
 // ========================================
-// SAMPLE DATA (Replace with API call)
+// API: fetch all questions, filter by layout_id from URL
 // ========================================
-const sampleData = {
-    domains: [
-        {
-            id: 1,
-            name: "Language Development",
-            subdomains: [
-                {
-                    id: 1,
-                    name: "Vocabulary",
-                    questions: [
-                        { id: 1, name: "What is your name?", question_id: 1 },
-                        { id: 2, name: "How old are you?", question_id: 2 }
-                    ]
-                },
-                {
-                    id: 2,
-                    name: "Grammar",
-                    questions: [
-                        { id: 3, name: "Can you form a sentence?", question_id: 3 }
-                    ]
-                }
-            ]
-        },
-        {
-            id: 2,
-            name: "Cognitive Development",
-            subdomains: [
-                {
-                    id: 3,
-                    name: "Problem Solving",
-                    questions: [
-                        { id: 4, name: "Solve this puzzle", question_id: 4 }
-                    ]
-                }
-            ]
-        }
-    ],
-    metadata: [
-        { id: 1, name: "Student ID", question_id: 101 },
-        { id: 2, name: "Assessment Date", question_id: 102 },
-        { id: 3, name: "Teacher Name", question_id: 103 }
-    ]
-};
+function getLayoutIdFromUrl() {
+    const match = window.location.pathname.match(/\/linkage\/view\/(\d+)/);
+    return match ? parseInt(match[1]) : null;
+}
 
-// ========================================
-// API FUNCTIONS (Placeholders for backend integration)
-// ========================================
-
-// 🔧 REPLACE WITH YOUR ACTUAL API CALL
-async function fetchCurrentLayout() {
+async function fetchAllQuestions() {
     try {
-        // This should call your API to get current layout data
-        // const response = await fetch('/api/layout/current');
-        // const data = await response.json();
-        // return data;
-        
-        // For now, return sample data
-        return sampleData;
+        // const response = await fetch('/api/questions/all');
+        // return await response.json();
+        // Sample data for illustration:
+        return [
+            { layout_id: 3, layout_name: 'Language Layout', date_edited: "2024-06-10", is_current: true, domain: "Language Development", subdomain: "Vocabulary", index_id: 1, name: "What is your name?" },
+            { layout_id: 3, layout_name: 'Language Layout', date_edited: "2024-06-10", is_current: true, domain: "Language Development", subdomain: "Vocabulary", index_id: 2, name: "How old are you?" },
+            { layout_id: 3, layout_name: 'Language Layout', date_edited: "2024-06-10", is_current: true, domain: "MetaData", subdomain: "", index_id: 101, name: "Student ID" },
+            { layout_id: 2, layout_name: 'Cognitive Layout', date_edited: "2024-05-20", is_current: false, domain: "Cognitive Development", subdomain: "Problem Solving", index_id: 4, name: "Solve this puzzle" },
+            { layout_id: 2, layout_name: 'Cognitive Layout', date_edited: "2024-05-20", is_current: false, domain: "MetaData", subdomain: "", index_id: 102, name: "Assessment Date" }
+        ];
+    } catch (e) {
+        return [];
+    }
+}
+
+function buildLayoutStructure(questions, layout_id) {
+    const domains = {};
+    const metadata = [];
+    questions.forEach(q => {
+        if (q.layout_id !== layout_id) return;
+        if (q.domain === "MetaData") {
+            metadata.push({ name: q.name, question_id: q.index_id });
+        } else {
+            if (!domains[q.domain]) domains[q.domain] = {};
+            if (!domains[q.domain][q.subdomain]) domains[q.domain][q.subdomain] = [];
+            domains[q.domain][q.subdomain].push({ name: q.name, question_id: q.index_id });
+        }
+    });
+    // Convert to array structure
+    return {
+        domains: Object.entries(domains).map(([domainName, subdomainsObj]) => ({
+            name: domainName,
+            subdomains: Object.entries(subdomainsObj).map(([subName, questions]) => ({
+                name: subName,
+                questions
+            }))
+        })),
+        metadata
+    };
+}
+
+// ========================================
+// INITIALIZATION
+// ========================================
+async function initializeLayout() {
+    try {
+        const layout_id = getLayoutIdFromUrl();
+        const questions = await fetchAllQuestions();
+        // Find the first question with this layout_id to get the layout_name
+        const layoutRow = questions.find(q => q.layout_id === layout_id);
+        const layout_name = layoutRow && layoutRow.layout_name ? layoutRow.layout_name : 'Layout Viewer';
+        document.getElementById('layoutNameHeader').textContent = layout_name;
+        document.getElementById('layoutIdHeader').textContent = layout_id ? `ID: ${layout_id}` : '';
+        layoutData = buildLayoutStructure(questions, layout_id);
+        renderLayout();
     } catch (error) {
-        console.error('Error fetching current layout:', error);
-        return { domains: [], metadata: [] };
+        console.error('Error initializing layout:', error);
     }
 }
 

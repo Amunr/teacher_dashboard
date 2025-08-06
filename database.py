@@ -21,7 +21,8 @@ questions = Table('questions', meta,
     Column('Index_ID', Integer),
     Column('Name', String),
     Column("Date edited",  Date),
-    Column("layout_id", Integer)
+    Column("layout_id", Integer),
+    Column("layout_name", String)  # Added for layout name
 )
 
 responses = Table('responses', meta,
@@ -105,3 +106,45 @@ def insert_response(json_data):
     if values_list:
         conn.execute(query,values_list)
 
+def insert_layout(json_data):
+    query = insert(questions)
+    read = select(func.max(questions.c.layout_id))
+    result = conn.execute(read).fetchone()
+    layout_id = (result[0] + 1) if result[0] is not None else 1
+
+    values = []
+    for item in json_data:
+        values.append({
+            'year_start': item['year_start'],
+            'year_end': item['year_end'],
+            'Domain': item['Domain'],
+            'SubDomain': item['SubDomain'],
+            'Index_ID': item['Index_ID'],
+            'Name': item['Name'],
+            'Date edited': item['Date edited'],
+            'layout_id': layout_id,
+            'layout_name': item['layout_name']
+        })
+    if values:
+        conn.execute(query, values)
+
+def update_layout(layout_id, json_data):
+    query = questions.update().where(questions.c.layout_id == json_data['layout_id'])
+    values = {
+        'year_start': json_data['year_start'],
+        'year_end': json_data['year_end'],
+        'Domain': json_data['Domain'],
+        'SubDomain': json_data['SubDomain'],
+        'Index_ID': json_data['Index_ID'],
+        'Name': json_data['Name'],
+        'Date edited': json_data['Date edited'],
+        'layout_name': json_data['layout_name']
+    }
+    conn.execute(query.values(values))
+
+def fetch_questions(request=None):
+    query = select(questions)
+    if request is not None:
+        query = query.where(questions.c.layout_id == request)
+    result = conn.execute(query).fetchall()
+    return [dict(row) for row in result]

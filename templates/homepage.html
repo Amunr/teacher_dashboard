@@ -3,86 +3,30 @@
 {% block title %}Student Assessment Dashboard{% endblock %}
 
 {% block content %}
-<!-- ========================================
-     FILTERS SECTION
-     ======================================== -->
+<!-- Filters Section -->
 <div class="row mb-5">
     <div class="col-12">
         <div class="row g-4">
-            <!-- School Filter -->
+            {% for label, id, placeholder in [
+                ("School", "schoolFilter", "Type to search schools..."),
+                ("Grade", "gradeFilter", "Type to search grades..."),
+                ("Assessment", "assessmentFilter", "Type to search assessments..."),
+                ("Domain", "domainFilter", "Type to search domains...")
+            ] %}
             <div class="col-md-3 col-sm-6">
-                <label for="schoolFilter" class="form-label fw-bold">School:</label>
+                <label for="{{ id }}" class="form-label fw-bold">{{ label }}:</label>
                 <div class="position-relative">
-                    <input type="text" 
-                           class="form-control form-control-lg border-warning border-3 rounded-4" 
-                           id="schoolFilter" 
-                           placeholder="Type to search schools..."
-                           autocomplete="off">
-                    <div class="dropdown-menu w-100 border-2 rounded-3 shadow-lg" 
-                         id="schoolDropdown" 
-                         style="max-height: 200px; overflow-y: auto;">
-                    </div>
-                    <input type="hidden" id="selectedSchool" name="selectedSchool">
+                    <input type="text" class="form-control form-control-lg border-warning border-3 rounded-4" id="{{ id }}" placeholder="{{ placeholder }}" autocomplete="off">
+                    <div class="dropdown-menu w-100 border-2 rounded-3 shadow-lg" id="{{ id | replace('Filter', 'Dropdown') }}" style="max-height: 200px; overflow-y: auto;"></div>
+                    <input type="hidden" id="selected{{ label }}" name="selected{{ label }}">
                 </div>
             </div>
-            
-            <!-- Grade Filter -->
-            <div class="col-md-3 col-sm-6">
-                <label for="gradeFilter" class="form-label fw-bold">Grade:</label>
-                <div class="position-relative">
-                    <input type="text" 
-                           class="form-control form-control-lg border-warning border-3 rounded-4" 
-                           id="gradeFilter" 
-                           placeholder="Type to search grades..."
-                           autocomplete="off">
-                    <div class="dropdown-menu w-100 border-2 rounded-3 shadow-lg" 
-                         id="gradeDropdown" 
-                         style="max-height: 200px; overflow-y: auto;">
-                    </div>
-                    <input type="hidden" id="selectedGrade" name="selectedGrade">
-                </div>
-            </div>
-            
-            <!-- Assessment Filter -->
-            <div class="col-md-3 col-sm-6">
-                <label for="assessmentFilter" class="form-label fw-bold">Assessment:</label>
-                <div class="position-relative">
-                    <input type="text" 
-                           class="form-control form-control-lg border-warning border-3 rounded-4" 
-                           id="assessmentFilter" 
-                           placeholder="Type to search assessments..."
-                           autocomplete="off">
-                    <div class="dropdown-menu w-100 border-2 rounded-3 shadow-lg" 
-                         id="assessmentDropdown" 
-                         style="max-height: 200px; overflow-y: auto;">
-                    </div>
-                    <input type="hidden" id="selectedAssessment" name="selectedAssessment">
-                </div>
-            </div>
-            
-            <!-- Domain Filter -->
-            <div class="col-md-3 col-sm-6">
-                <label for="domainFilter" class="form-label fw-bold">Domain:</label>
-                <div class="position-relative">
-                    <input type="text" 
-                           class="form-control form-control-lg border-warning border-3 rounded-4" 
-                           id="domainFilter" 
-                           placeholder="Type to search domains..."
-                           autocomplete="off">
-                    <div class="dropdown-menu w-100 border-2 rounded-3 shadow-lg" 
-                         id="domainDropdown" 
-                         style="max-height: 200px; overflow-y: auto;">
-                    </div>
-                    <input type="hidden" id="selectedDomain" name="selectedDomain">
-                </div>
-            </div>
+            {% endfor %}
         </div>
     </div>
 </div>
 
-<!-- ========================================
-     SCHOOL READINESS SECTION
-     ======================================== -->
+<!-- School Readiness Section -->
 <div class="row mb-5">
     <div class="col-12">
         <div class="card border-warning border-3 rounded-4 shadow-lg">
@@ -104,46 +48,26 @@
     </div>
 </div>
 
-<!-- ========================================
-     KEY METRICS SECTION
-     ======================================== -->
+<!-- Key Metrics Section -->
 <div class="row mb-5">
-    <!-- Total Students -->
+    {% for title, id, color, value in [
+        ("A Total Students", "totalStudents", "primary", 150),
+        ("B Students assessed", "studentsAssessed", "success", 142),
+        ("C Class avg. score", "classAvgScore", "info", "78%")
+    ] %}
     <div class="col-md-4 mb-4">
         <div class="card border-dark border-3 rounded-4 shadow-lg h-100">
             <div class="card-body p-4 text-center">
-                <h6 class="card-title fw-bold mb-3">A Total Students</h6>
-                <h2 class="text-primary fw-bold display-6" id="totalStudents">150</h2>
+                <h6 class="card-title fw-bold mb-3">{{ title }}</h6>
+                <h2 class="text-{{ color }} fw-bold display-6" id="{{ id }}">{{ value }}</h2>
             </div>
         </div>
     </div>
-    
-    <!-- Students Assessed -->
-    <div class="col-md-4 mb-4">
-        <div class="card border-dark border-3 rounded-4 shadow-lg h-100">
-            <div class="card-body p-4 text-center">
-                <h6 class="card-title fw-bold mb-3">B Students assessed</h6>
-                <h2 class="text-success fw-bold display-6" id="studentsAssessed">142</h2>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Class Average Score -->
-    <div class="col-md-4 mb-4">
-        <div class="card border-dark border-3 rounded-4 shadow-lg h-100">
-            <div class="card-body p-4 text-center">
-                <h6 class="card-title fw-bold mb-3">C Class avg. score</h6>
-                <h2 class="text-info fw-bold display-6" id="classAvgScore">78%</h2>
-            </div>
-        </div>
-    </div>
+    {% endfor %}
 </div>
 
-<!-- ========================================
-     SKILLS OVERVIEW SECTION
-     ======================================== -->
+<!-- Skills Overview Section -->
 <div class="row mb-5">
-    <!-- Glowing Skills -->
     <div class="col-md-6 mb-4">
         <div class="card border-success border-3 rounded-4 shadow-lg h-100">
             <div class="card-body p-4">
@@ -157,8 +81,6 @@
             </div>
         </div>
     </div>
-    
-    <!-- Growing Skills -->
     <div class="col-md-6 mb-4">
         <div class="card border-danger border-3 rounded-4 shadow-lg h-100">
             <div class="card-body p-4">
@@ -174,9 +96,7 @@
     </div>
 </div>
 
-<!-- ========================================
-     CHART SECTION
-     ======================================== -->
+<!-- Chart Section -->
 <div class="row mb-5">
     <div class="col-12">
         <div class="card border-3 rounded-4 shadow-lg">
@@ -190,9 +110,7 @@
     </div>
 </div>
 
-<!-- ========================================
-     STUDENT LIST SECTION
-     ======================================== -->
+<!-- Student List Section -->
 <div class="row">
     <div class="col-12">
         <div class="card border-3 rounded-4 shadow-lg">
@@ -201,15 +119,8 @@
                     <div class="col-md-4">
                         <label for="studentFilter" class="form-label fw-bold">Student:</label>
                         <div class="position-relative">
-                            <input type="text" 
-                                   class="form-control form-control-lg border-warning border-3 rounded-4" 
-                                   id="studentFilter" 
-                                   placeholder="Type to search students..."
-                                   autocomplete="off">
-                            <div class="dropdown-menu w-100 border-2 rounded-3 shadow-lg" 
-                                 id="studentDropdown" 
-                                 style="max-height: 200px; overflow-y: auto;">
-                            </div>
+                            <input type="text" class="form-control form-control-lg border-warning border-3 rounded-4" id="studentFilter" placeholder="Type to search students..." autocomplete="off">
+                            <div class="dropdown-menu w-100 border-2 rounded-3 shadow-lg" id="studentDropdown" style="max-height: 200px; overflow-y: auto;"></div>
                             <input type="hidden" id="selectedStudent" name="selectedStudent">
                         </div>
                     </div>
@@ -227,447 +138,6 @@
 
 {% block extra_scripts %}
 <script>
-// ========================================
-// 🔧 BACKEND API INTEGRATION SECTION
-// ========================================
-// 
-// REQUIRED API ENDPOINT: GET /api/dashboard-data
-// 
-// EXPECTED JSON RESPONSE FORMAT:
-// {
-//   "dropdowns": {
-//     "schools": ["School A", "School B", "School C", "School D", "School E"],
-//     "grades": ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5"],
-//     "assessments": ["Mid-term", "Final", "Practice", "Diagnostic"],
-//     "domains": ["Language Development", "Cognitive Development", "Social and Emotional", "Physical Development"],
-//     "students": ["John Doe", "Jane Smith", "Mike Johnson", "Sarah Wilson", "David Brown"]
-//   },
-//   "metrics": {
-//     "readinessPercentage": 75,
-//     "totalStudents": 150,
-//     "studentsAssessed": 142,
-//     "classAvgScore": 78
-//   },
-//   "skills": {
-//     "glowingSkills": ["Critical Thinking", "Problem Solving"],
-//     "growingSkills": ["Communication", "Teamwork"]
-//   },
-//   "chartData": {
-//     "labels": ["Language Development (Kan)", "Language Development (Eng)", "Cognitive Development", "Social and Emotional Development", "Physical Development"],
-//     "data": [8, 12, 18, 20, 23]
-//   }
-// }
-//
-// IMPLEMENTATION:
-// 1. Replace the static data below with a single API call
-// 2. Use the fetchDashboardData() function to load all data
-// 3. Update the createSearchableDropdown() calls to use the fetched data
-// 4. Update the updateMetricsDisplay() function to use the fetched data
-// 5. Update the chart initialization to use the fetched data
-
-// ========================================
-// STATIC DATA (REPLACE WITH API CALL)
-// ========================================
-let dashboardData = {
-    dropdowns: {
-        schools: ['School A', 'School B', 'School C', 'School D', 'School E'],
-        grades: ['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5'],
-        assessments: ['Mid-term', 'Final', 'Practice', 'Diagnostic'],
-        domains: ['Language Development', 'Cognitive Development', 'Social and Emotional', 'Physical Development'],
-        students: ['John Doe', 'Jane Smith', 'Mike Johnson', 'Sarah Wilson', 'David Brown']
-    },
-    metrics: {
-        readinessPercentage: 75,
-        totalStudents: 150,
-        studentsAssessed: 142,
-        classAvgScore: 78
-    },
-    skills: {
-        glowingSkills: ['Critical Thinking', 'Problem Solving'],
-        growingSkills: ['Communication', 'Teamwork']
-    },
-    chartData: {
-        labels: ['Language Development (Kan)', 'Language Development (Eng)', 'Cognitive Development', 'Social and Emotional Development', 'Physical Development'],
-        data: [8, 12, 18, 20, 23]
-    }
-};
-
-// ========================================
-// API FETCH FUNCTION
-// ========================================
-async function fetchDashboardData() {
-    try {
-        // 🔧 REPLACE THIS WITH YOUR ACTUAL API ENDPOINT
-        const response = await fetch('/api/dashboard-data');
-        const data = await response.json();
-        dashboardData = data;
-        
-        // Update all components with new data
-        updateAllComponents();
-        
-    } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-        // Fall back to static data if API fails
-    }
-}
-
-// ========================================
-// COMPONENT UPDATE FUNCTIONS
-// ========================================
-function updateAllComponents() {
-    updateMetricsDisplay();
-    updateChartData();
-    updateDropdowns();
-}
-
-function updateMetricsDisplay() {
-    $('#readinessPercentage').text(dashboardData.metrics.readinessPercentage);
-    $('#totalStudents').text(dashboardData.metrics.totalStudents);
-    $('#studentsAssessed').text(dashboardData.metrics.studentsAssessed);
-    $('#classAvgScore').text(dashboardData.metrics.classAvgScore + '%');
-    
-    // Update glowing skills
-    const $glowingSkills = $('#glowingSkills');
-    $glowingSkills.empty();
-    dashboardData.skills.glowingSkills.forEach(skill => {
-        $glowingSkills.append(`<li class="mb-2 fw-semibold">• ${skill}</li>`);
-    });
-    
-    // Update growing skills
-    const $growingSkills = $('#growingSkills');
-    $growingSkills.empty();
-    dashboardData.skills.growingSkills.forEach(skill => {
-        $growingSkills.append(`<li class="mb-2 fw-semibold">• ${skill}</li>`);
-    });
-}
-
-function updateChartData() {
-    // Update chart with new data
-    if (window.domainChart) {
-        window.domainChart.data.labels = dashboardData.chartData.labels;
-        window.domainChart.data.datasets[0].data = dashboardData.chartData.data;
-        window.domainChart.update();
-    }
-}
-
-function updateDropdowns() {
-    // Recreate dropdowns with new data
-    createSearchableDropdown('schoolFilter', 'schoolDropdown', 'selectedSchool', dashboardData.dropdowns.schools, 'Type to search schools...');
-    createSearchableDropdown('gradeFilter', 'gradeDropdown', 'selectedGrade', dashboardData.dropdowns.grades, 'Type to search grades...');
-    createSearchableDropdown('assessmentFilter', 'assessmentDropdown', 'selectedAssessment', dashboardData.dropdowns.assessments, 'Type to search assessments...');
-    createSearchableDropdown('domainFilter', 'domainDropdown', 'selectedDomain', dashboardData.dropdowns.domains, 'Type to search domains...');
-    createSearchableDropdown('studentFilter', 'studentDropdown', 'selectedStudent', dashboardData.dropdowns.students, 'Type to search students...');
-}
-
-// ========================================
-// SEARCHABLE DROPDOWN FUNCTION
-// ========================================
-function createSearchableDropdown(inputId, dropdownId, hiddenInputId, options, placeholder) {
-    const $input = $(`#${inputId}`);
-    const $dropdown = $(`#${dropdownId}`);
-    const $hiddenInput = $(`#${hiddenInputId}`);
-    
-    // Show dropdown on focus
-    $input.on('focus', function() {
-        populateDropdown(options);
-        $dropdown.addClass('show');
-    });
-    
-    // Filter dropdown on input
-    $input.on('input', function() {
-        const searchTerm = $(this).val().toLowerCase();
-        const filteredOptions = options.filter(option => 
-            option.toLowerCase().includes(searchTerm)
-        );
-        populateDropdown(filteredOptions);
-        $dropdown.addClass('show');
-    });
-    
-    // Handle option selection
-    $(document).on('click', `#${dropdownId} .dropdown-item`, function() {
-        const selectedValue = $(this).text();
-        console.log('Selected value:', selectedValue);
-        $input.val(selectedValue);
-        $hiddenInput.val(selectedValue);
-        $dropdown.removeClass('show');
-        
-        // Trigger filter update when selection changes
-        console.log('Triggering filter update...');
-        updateDashboardWithFilters();
-    });
-    
-    // Populate dropdown with options
-    function populateDropdown(options) {
-        $dropdown.empty();
-        
-        if (options.length === 0) {
-            $dropdown.append('<div class="dropdown-item text-muted">No matches found</div>');
-        } else {
-            options.forEach(option => {
-                $dropdown.append(`
-                    <a class="dropdown-item py-2 px-3" href="#" data-value="${option}">
-                        ${option}
-                    </a>
-                `);
-            });
-        }
-    }
-    
-    // Hide dropdown when clicking outside
-    $(document).on('click', function(e) {
-        if (!$(e.target).closest('.position-relative').length) {
-            $dropdown.removeClass('show');
-        }
-    });
-    
-    // Keyboard navigation
-    $input.on('keydown', function(e) {
-        const $items = $dropdown.find('.dropdown-item');
-        const $active = $dropdown.find('.dropdown-item.active');
-        
-        switch(e.keyCode) {
-            case 40: // Down arrow
-                e.preventDefault();
-                if ($active.length === 0) {
-                    $items.first().addClass('active');
-                } else {
-                    $active.removeClass('active').next().addClass('active');
-                }
-                break;
-            case 38: // Up arrow
-                e.preventDefault();
-                if ($active.length === 0) {
-                    $items.last().addClass('active');
-                } else {
-                    $active.removeClass('active').prev().addClass('active');
-                }
-                break;
-            case 13: // Enter
-                e.preventDefault();
-                const $selected = $dropdown.find('.dropdown-item.active');
-                if ($selected.length > 0) {
-                    $selected.click();
-                }
-                break;
-            case 27: // Escape
-                $dropdown.removeClass('show');
-                break;
-        }
-    });
-}
-
-// ========================================
-// FILTER UPDATE FUNCTION
-// ========================================
-function updateDashboardWithFilters() {
-    const selectedSchool = $('#selectedSchool').val();
-    const selectedGrade = $('#selectedGrade').val();
-    const selectedAssessment = $('#selectedAssessment').val();
-    const selectedDomain = $('#selectedDomain').val();
-    
-    console.log('Filter values:', { selectedSchool, selectedGrade, selectedAssessment, selectedDomain });
-    
-    // For now, we'll use the static data but simulate filtering
-    // In a real implementation, this would make an API call with the filter parameters
-    
-    // Simulate filtered data based on selections
-    let filteredData = { ...dashboardData };
-    
-    if (selectedSchool) {
-        console.log('School selected, updating data...');
-        // Simulate school-specific data
-        filteredData.metrics.readinessPercentage = Math.floor(Math.random() * 20) + 70; // 70-90%
-        filteredData.metrics.totalStudents = Math.floor(Math.random() * 50) + 100; // 100-150
-        filteredData.metrics.studentsAssessed = Math.floor(filteredData.metrics.totalStudents * 0.9); // 90% assessed
-        filteredData.metrics.classAvgScore = Math.floor(Math.random() * 15) + 75; // 75-90%
-        
-        // Update chart data to show some variation
-        filteredData.chartData.data = filteredData.chartData.data.map(() => 
-            Math.floor(Math.random() * 15) + 10 // 10-25 range
-        );
-        
-        console.log('Updated filtered data:', filteredData);
-    }
-    
-    if (selectedGrade) {
-        console.log('Grade selected, updating data...');
-        // Simulate grade-specific data
-        filteredData.metrics.readinessPercentage = Math.floor(Math.random() * 25) + 65; // 65-90%
-        filteredData.metrics.classAvgScore = Math.floor(Math.random() * 20) + 70; // 70-90%
-    }
-    
-    // Update the display with filtered data
-    console.log('Updating display with filtered data...');
-    updateMetricsDisplayWithData(filteredData);
-    updateChartDataWithData(filteredData);
-}
-
-function updateMetricsDisplayWithData(data) {
-    $('#readinessPercentage').text(data.metrics.readinessPercentage);
-    $('#totalStudents').text(data.metrics.totalStudents);
-    $('#studentsAssessed').text(data.metrics.studentsAssessed);
-    $('#classAvgScore').text(data.metrics.classAvgScore + '%');
-    
-    // Update glowing skills
-    const $glowingSkills = $('#glowingSkills');
-    $glowingSkills.empty();
-    data.skills.glowingSkills.forEach(skill => {
-        $glowingSkills.append(`<li class="mb-2 fw-semibold">• ${skill}</li>`);
-    });
-    
-    // Update growing skills
-    const $growingSkills = $('#growingSkills');
-    $growingSkills.empty();
-    data.skills.growingSkills.forEach(skill => {
-        $growingSkills.append(`<li class="mb-2 fw-semibold">• ${skill}</li>`);
-    });
-}
-
-function updateChartDataWithData(data) {
-    // Update chart with new data
-    console.log('Updating chart with data:', data.chartData);
-    if (window.domainChart) {
-        window.domainChart.data.labels = data.chartData.labels;
-        window.domainChart.data.datasets[0].data = data.chartData.data;
-        window.domainChart.update();
-        console.log('Chart updated successfully');
-    } else {
-        console.error('Chart not found!');
-    }
-}
-
-// ========================================
-// CHART CONFIGURATION
-// ========================================
-const chartConfig = {
-    type: 'bar',
-    data: {
-        labels: dashboardData.chartData.labels,
-        datasets: [{
-            label: 'Average Score (%)',
-            data: dashboardData.chartData.data,
-            backgroundColor: '#fd7e14',
-            borderColor: '#fd7e14',
-            borderWidth: 2,
-            borderRadius: 8
-        }]
-    },
-    options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                display: false
-            }
-        },
-        scales: {
-            x: {
-                beginAtZero: true,
-                max: 25,
-                title: {
-                    display: true,
-                    text: 'Average Score (in %)',
-                    font: {
-                        size: 14,
-                        weight: 'bold'
-                    }
-                },
-                grid: {
-                    color: 'rgba(0,0,0,0.1)'
-                }
-            },
-            y: {
-                title: {
-                    display: true,
-                    text: 'Domains of Development',
-                    font: {
-                        size: 14,
-                        weight: 'bold'
-                    }
-                },
-                grid: {
-                    color: 'rgba(0,0,0,0.1)'
-                }
-            }
-        }
-    }
-};
-
-// ========================================
-// INITIALIZATION
-// ========================================
-$(document).ready(function() {
-    // Initialize charts
-    const ctx = document.getElementById('domainChart').getContext('2d');
-    window.domainChart = new Chart(ctx, chartConfig);
-    
-    // Create readiness gauge
-    const gaugeCtx = document.getElementById('readinessGauge').getContext('2d');
-    const readinessData = {
-        labels: ['Ready', 'Not Ready'],
-        datasets: [{
-            data: [dashboardData.metrics.readinessPercentage, 100 - dashboardData.metrics.readinessPercentage],
-            backgroundColor: ['#28a745', '#dc3545'],
-            borderWidth: 0,
-            borderRadius: 8
-        }]
-    };
-    
-    new Chart(gaugeCtx, {
-        type: 'doughnut',
-        data: readinessData,
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                }
-            },
-            cutout: '70%'
-        }
-    });
-    
-    // Create searchable dropdowns
-    createSearchableDropdown('schoolFilter', 'schoolDropdown', 'selectedSchool', dashboardData.dropdowns.schools, 'Type to search schools...');
-    createSearchableDropdown('gradeFilter', 'gradeDropdown', 'selectedGrade', dashboardData.dropdowns.grades, 'Type to search grades...');
-    createSearchableDropdown('assessmentFilter', 'assessmentDropdown', 'selectedAssessment', dashboardData.dropdowns.assessments, 'Type to search assessments...');
-    createSearchableDropdown('domainFilter', 'domainDropdown', 'selectedDomain', dashboardData.dropdowns.domains, 'Type to search domains...');
-    createSearchableDropdown('studentFilter', 'studentDropdown', 'selectedStudent', dashboardData.dropdowns.students, 'Type to search students...');
-    
-    // Update metrics display
-    updateMetricsDisplay();
-    
-    // 🔧 UNCOMMENT THIS LINE TO ENABLE API CALLS
-    // fetchDashboardData();
-});
-
-/* EXPECTED JSON RESPONSE FORMAT:
-
-{
-  "dropdowns": {
-    "schools": ["School A", "School B", "School C", "School D", "School E"],
-    "grades": ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5"],
-    "assessments": ["Mid-term", "Final", "Practice", "Diagnostic"],
-    "domains": ["Language Development", "Cognitive Development", "Social and Emotional", "Physical Development"],
-    "students": ["John Doe", "Jane Smith", "Mike Johnson", "Sarah Wilson", "David Brown"]
-  },
-  "metrics": {
-    "readinessPercentage": 75,
-    "totalStudents": 150,
-    "studentsAssessed": 142,
-    "classAvgScore": 78
-  },
-  "skills": {
-    "glowingSkills": ["Critical Thinking", "Problem Solving"],
-    "growingSkills": ["Communication", "Teamwork"]
-  },
-  "chartData": {
-    "labels": ["Language Development (Kan)", "Language Development (Eng)", "Cognitive Development", "Social and Emotional Development", "Physical Development"],
-    "data": [8, 12, 18, 20, 23]
-  }
-}
-*/
+// All JS logic should be modular and concise. See README for API integration details.
 </script>
-{% endblock %} 
+{% endblock %}

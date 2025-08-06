@@ -1,0 +1,105 @@
+{% extends "layout.html" %}
+
+{% block title %}Layout View{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold text-primary">
+            <i class="bi bi-collection"></i> Layouts
+        </h2>
+        <button class="btn btn-success btn-lg" onclick="createNewLayout()">
+            <i class="bi bi-plus-circle me-2"></i>New Layout
+        </button>
+    </div>
+    <div id="layoutsContainer" class="row g-4">
+        <!-- Layout boxes will be rendered here -->
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Fetch all questions (API returns the entire questions table)
+async function fetchAllQuestions() {
+    try {
+        // const response = await fetch('/api/questions/all');
+        // return await response.json();
+        // Sample data for illustration:
+        return [
+            { layout_id: 3, date_edited: "2024-06-10", is_current: true, domain: "Language Development", subdomain: "Vocabulary", index_id: 1, name: "What is your name?" },
+            { layout_id: 3, date_edited: "2024-06-10", is_current: true, domain: "Language Development", subdomain: "Vocabulary", index_id: 2, name: "How old are you?" },
+            { layout_id: 2, date_edited: "2024-05-20", is_current: false, domain: "Cognitive Development", subdomain: "Problem Solving", index_id: 4, name: "Solve this puzzle" },
+            { layout_id: 1, date_edited: "2024-04-15", is_current: false, domain: "MetaData", subdomain: "", index_id: 101, name: "Student ID" }
+        ];
+    } catch (e) {
+        return [];
+    }
+}
+
+
+function groupLayoutsById(questions) {
+    const layouts = {};
+    questions.forEach(q => {
+        if (!layouts[q.layout_id]) {
+            layouts[q.layout_id] = {
+                layout_id: q.layout_id,
+                layout_name: q.layout_name,
+                date_edited: q.date_edited,
+                is_current: q.is_current,
+                questions: []
+            };
+        }
+        layouts[q.layout_id].questions.push(q);
+    });
+    return Object.values(layouts);
+}
+
+function renderLayouts(layouts) {
+    const container = document.getElementById('layoutsContainer');
+    container.innerHTML = '';
+    // Sort: current first, then by date_edited desc
+    layouts.sort((a, b) => (b.is_current - a.is_current) || (new Date(b.date_edited) - new Date(a.date_edited)));
+    layouts.forEach(layout => {
+        const box = document.createElement('div');
+        box.className = "col-md-4";
+        box.innerHTML = `
+            <div class="card shadow-lg border-3 ${layout.is_current ? 'border-warning' : 'border-primary'} rounded-4"
+                 style="${layout.is_current ? 'background: #fffbe6;' : ''}">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold mb-1">
+                        ${layout.layout_name ? layout.layout_name : `Layout #${layout.layout_id}`}
+                        ${layout.is_current ? '<span class="badge bg-warning text-dark ms-2">Current</span>' : ''}
+                    </h5>
+                    <div class="small text-muted mb-2">ID: ${layout.layout_id}</div>
+                    <p class="card-text text-muted mb-2">
+                        <i class="bi bi-clock-history me-1"></i>
+                        Last Edited: ${layout.date_edited}
+                    </p>
+                    <a href="/linkage/view/${layout.layout_id}" class="btn btn-outline-primary w-100">
+                        <i class="bi bi-eye"></i> View
+                    </a>
+                </div>
+            </div>
+        `;
+        container.appendChild(box);
+    });
+}
+
+
+async function initializeLayoutView() {
+    const questions = await fetchAllQuestions();
+    const layouts = groupLayoutsById(questions);
+    renderLayouts(layouts);
+}
+
+
+function createNewLayout() {
+    window.location.href = '/layout/edit/new';
+}
+
+$(document).ready(function() {
+    initializeLayoutView();
+});
+</script>
+{% endblock %}
