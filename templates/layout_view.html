@@ -1,3 +1,13 @@
+{#
+Variables required for this template:
+
+layouts: List of dicts, each with:
+    layout_id: int
+    layout_name: str
+    date_edited: str (YYYY-MM-DD)
+    is_current: bool
+#}
+
 {% extends "layout.html" %}
 
 {% block title %}Layout View{% endblock %}
@@ -8,98 +18,31 @@
         <h2 class="fw-bold text-primary">
             <i class="bi bi-collection"></i> Layouts
         </h2>
-        <button class="btn btn-success btn-lg" onclick="createNewLayout()">
+        <a class="btn btn-success btn-lg" href="{{ url_for('create_new_layout') }}">
             <i class="bi bi-plus-circle me-2"></i>New Layout
-        </button>
+        </a>
     </div>
-    <div id="layoutsContainer" class="row g-4">
-        <!-- Layout boxes will be rendered here -->
-    </div>
-</div>
-{% endblock %}
-
-{% block extra_scripts %}
-<script>
-// Fetch all questions (API returns the entire questions table)
-async function fetchAllQuestions() {
-    try {
-        // const response = await fetch('/api/questions/all');
-        // return await response.json();
-        // Sample data for illustration:
-        return [
-            { layout_id: 3, date_edited: "2024-06-10", is_current: true, domain: "Language Development", subdomain: "Vocabulary", index_id: 1, name: "What is your name?" },
-            { layout_id: 3, date_edited: "2024-06-10", is_current: true, domain: "Language Development", subdomain: "Vocabulary", index_id: 2, name: "How old are you?" },
-            { layout_id: 2, date_edited: "2024-05-20", is_current: false, domain: "Cognitive Development", subdomain: "Problem Solving", index_id: 4, name: "Solve this puzzle" },
-            { layout_id: 1, date_edited: "2024-04-15", is_current: false, domain: "MetaData", subdomain: "", index_id: 101, name: "Student ID" }
-        ];
-    } catch (e) {
-        return [];
-    }
-}
-
-
-function groupLayoutsById(questions) {
-    const layouts = {};
-    questions.forEach(q => {
-        if (!layouts[q.layout_id]) {
-            layouts[q.layout_id] = {
-                layout_id: q.layout_id,
-                layout_name: q.layout_name,
-                date_edited: q.date_edited,
-                is_current: q.is_current,
-                questions: []
-            };
-        }
-        layouts[q.layout_id].questions.push(q);
-    });
-    return Object.values(layouts);
-}
-
-function renderLayouts(layouts) {
-    const container = document.getElementById('layoutsContainer');
-    container.innerHTML = '';
-    // Sort: current first, then by date_edited desc
-    layouts.sort((a, b) => (b.is_current - a.is_current) || (new Date(b.date_edited) - new Date(a.date_edited)));
-    layouts.forEach(layout => {
-        const box = document.createElement('div');
-        box.className = "col-md-4";
-        box.innerHTML = `
-            <div class="card shadow-lg border-3 ${layout.is_current ? 'border-warning' : 'border-primary'} rounded-4"
-                 style="${layout.is_current ? 'background: #fffbe6;' : ''}">
+    <div class="row g-4">
+        {% for layout in layouts %}
+        <div class="col-md-4">
+            <div class="card shadow-lg border-3 {% if layout.is_current %}border-warning{% else %}border-primary{% endif %} rounded-4" {% if layout.is_current %}style="background: #fffbe6;"{% endif %}>
                 <div class="card-body">
                     <h5 class="card-title fw-bold mb-1">
-                        ${layout.layout_name ? layout.layout_name : `Layout #${layout.layout_id}`}
-                        ${layout.is_current ? '<span class="badge bg-warning text-dark ms-2">Current</span>' : ''}
+                        {{ layout.layout_name if layout.layout_name else ('Layout #' ~ layout.layout_id) }}
+                        {% if layout.is_current %}<span class="badge bg-warning text-dark ms-2">Current</span>{% endif %}
                     </h5>
-                    <div class="small text-muted mb-2">ID: ${layout.layout_id}</div>
+                    <div class="small text-muted mb-2">ID: {{ layout.layout_id }}</div>
                     <p class="card-text text-muted mb-2">
                         <i class="bi bi-clock-history me-1"></i>
-                        Last Edited: ${layout.date_edited}
+                        Last Edited: {{ layout.date_edited }}
                     </p>
-                    <a href="/linkage/view/${layout.layout_id}" class="btn btn-outline-primary w-100">
+                    <a href="{{ url_for('layout_viewer', layout_id=layout.layout_id) }}" class="btn btn-outline-primary w-100">
                         <i class="bi bi-eye"></i> View
                     </a>
                 </div>
             </div>
-        `;
-        container.appendChild(box);
-    });
-}
-
-
-async function initializeLayoutView() {
-    const questions = await fetchAllQuestions();
-    const layouts = groupLayoutsById(questions);
-    renderLayouts(layouts);
-}
-
-
-function createNewLayout() {
-    window.location.href = '/layout/edit/new';
-}
-
-$(document).ready(function() {
-    initializeLayoutView();
-});
-</script>
+        </div>
+        {% endfor %}
+    </div>
+</div>
 {% endblock %}
