@@ -1,3 +1,89 @@
+def fetch_all_layouts():
+    """Return a list of all layouts, grouped by layout_id, with layout_name, date_edited, is_current."""
+    query = select(
+        questions.c.layout_id,
+        questions.c.layout_name,
+        func.max(questions.c.__table__.c['Date edited']).label('date_edited'),
+        func.max(questions.c.year_end).label('year_end'),
+        func.max(questions.c.year_start).label('year_start')
+    ).group_by(questions.c.layout_id, questions.c.layout_name)
+    result = conn.execute(query).fetchall()
+    # Mark the most recent as current
+    if not result:
+        return []
+    # Find the layout with the latest year_end as current
+    max_year_end = max([r['year_end'] for r in result if r['year_end'] is not None], default=None)
+    layouts = []
+    for row in result:
+        layouts.append({
+            'layout_id': row['layout_id'],
+            'layout_name': row['layout_name'],
+            'date_edited': str(row['date_edited']) if row['date_edited'] else '',
+            'is_current': (row['year_end'] == max_year_end)
+        })
+    return layouts
+
+def fetch_layout_jinja(layout_id):
+    """Return a dict with layout_name, layout_id, domains, metadata_list, layout_start_date, layout_end_date for Jinja2."""
+    rows = fetch_questions(layout_id)
+    if not rows:
+        return None
+    layout_name = rows[0].get('layout_name', f'Layout #{layout_id}')
+    # Find min/max year_start/year_end
+    year_start = min([r['year_start'] for r in rows if r['year_start']])
+    year_end = max([r['year_end'] for r in rows if r['year_end']])
+    # Group domains/subdomains/questions
+    domains = {}
+    metadata_list = []
+    for r in rows:
+        if r['Domain'] == 'MetaData':
+            metadata_list.append({
+                'id': r['id'],
+                'name': r['Name'],
+                'question_id': r['Index_ID']
+            })
+        else:
+            dname = r['Domain']
+            sdname = r['SubDomain']
+            if dname not in domains:
+                domains[dname] = {}
+            if sdname not in domains[dname]:
+                domains[dname][sdname] = []
+            domains[dname][sdname].append({
+                'id': r['id'],
+                'name': r['Name'],
+                'question_id': r['Index_ID']
+            })
+    # Convert to list structure
+    domain_list = []
+    for dname, subdict in domains.items():
+        sub_list = []
+        for sdname, qlist in subdict.items():
+            sub_list.append({'id': hash(sdname), 'name': sdname, 'questions': qlist})
+        domain_list.append({'id': hash(dname), 'name': dname, 'subdomains': sub_list})
+    return {
+        'layout_name': layout_name,
+        'layout_id': layout_id,
+        'domains': domain_list,
+        'metadata_list': metadata_list,
+        'layout_start_date': str(year_start),
+        'layout_end_date': str(year_end)
+    }
+
+def empty_layout_jinja():
+    """Return an empty layout structure for new layout creation."""
+    return {
+        'layout_name': '',
+        'layout_id': '',
+        'domains': [],
+        'metadata_list': [
+            {'id': 1, 'name': 'Student ID', 'question_id': 101},
+            {'id': 2, 'name': 'Assessment Date', 'question_id': 102},
+            {'id': 3, 'name': 'Teacher Name', 'question_id': 103}
+        ],
+        'layout_start_date': '',
+        'layout_end_date': ''
+    }
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, DateTime, Text, ForeignKey, Date, insert, select, func
 import json
 from datetime import date
