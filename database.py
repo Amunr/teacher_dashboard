@@ -108,9 +108,12 @@ def empty_layout_jinja():
         'layout_id': '',
         'domains': [],
         'metadata_list': [
-            {'id': 1, 'name': 'Student ID', 'question_id': 101},
-            {'id': 2, 'name': 'Assessment Date', 'question_id': 102},
-            {'id': 3, 'name': 'Teacher Name', 'question_id': 103}
+            {'id': 1, 'name': 'Date', 'question_id': 0},
+            {'id': 2, 'name': 'Student Name', 'question_id': 0},
+            {'id': 3, 'name': 'School', 'question_id': 0},
+            {'id': 4, 'name': 'Teacher Name', 'question_id': 0},
+            {'id': 5, 'name': 'Assessment Type', 'question_id': 0},
+            {'id': 6, 'name': 'Grade', 'question_id': 0},
         ],
         'layout_start_date': '',
         'layout_end_date': ''
