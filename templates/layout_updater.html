@@ -5,20 +5,7 @@
 {% block content %}
 {% set update_mode = true %}
 <div class="container py-4">
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const form = document.querySelector('form');
-        const buttons = form.querySelectorAll('button[formaction]');
-        buttons.forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.preventDefault();
-                form.action = btn.getAttribute('formaction');
-                form.method = btn.getAttribute('formmethod') || 'post';
-                form.submit();
-            });
-        });
-    });
-    </script>
+
     <div class="row mb-4">
         <div class="col-12">
             <h2 class="fw-bold text-primary mb-3">
@@ -101,17 +88,8 @@
                 </div>
             </div>
             {% endfor %}
-            </div>
         </div>
-    </form>
-    <div class="row mb-3">
-        <div class="col-12 d-flex justify-content-center">
-            <form method="post" action="{{ url_for('update_add_domain', layout_id=layout_id) }}" class="w-100">
-                <button type="submit" class="btn btn-outline-primary btn-lg w-100">
-                    <i class="bi bi-plus-circle me-2"></i>Add New Domain
-                </button>
-            </form>
-        </div>
+        <div class="row mb-3">
             <div class="col-12">
                 <div class="card border-info border-3 rounded-4 shadow-lg mb-3">
                     <div class="card-header bg-info bg-opacity-10 d-flex align-items-center">
@@ -163,5 +141,13 @@
             </div>
         </div>
     </form>
+    <div class="row mb-3">
+        <div class="col-12 d-flex justify-content-center">
+            <form method="post" action="{{ url_for('update_add_domain', layout_id=layout_id) }}" class="w-100">
+                <button type="submit" class="btn btn-outline-primary btn-lg w-100">
+                    <i class="bi bi-plus-circle me-2"></i>Add New Domain
+                </button>
+            </form>
+        </div>
 </div>
 {% endblock %}

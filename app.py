@@ -2,6 +2,7 @@
 from flask import Flask, flash, render_template, request, redirect, url_for, session
 import database
 import time
+import uuid
 
 app = Flask(__name__)
 app.secret_key = 'dev'  # For session usage
@@ -252,28 +253,8 @@ def submit_layout():
 def update_layout_submit(layout_id):
     form = request.form
     layout = get_layout()
-    layout['layout_name'] = form.get('layout_name', 'New Layout')
-    layout['layout_start_date'] = form.get('layout_start_date')
-    layout['layout_end_date'] = form.get('layout_end_date')
-    for meta in layout.get('metadata_list', []):
-        key = f"metadata_id_{meta['id']}"
-        if key in form:
-            meta['question_id'] = int(form[key])
-    for domain in layout.get('domains', []):
-        dkey = f"domain_name_{domain['id']}"
-        if dkey in form:
-            domain['name'] = form[dkey]
-        for sub in domain.get('subdomains', []):
-            skey = f"subdomain_name_{domain['id']}_{sub['id']}"
-            if skey in form:
-                sub['name'] = form[skey]
-            for q in sub.get('questions', []):
-                qkey = f"question_name_{domain['id']}_{sub['id']}_{q['id']}"
-                qidkey = f"question_id_{domain['id']}_{sub['id']}_{q['id']}"
-                if qkey in form:
-                    q['name'] = form[qkey]
-                if qidkey in form:
-                    q['question_id'] = int(form[qidkey])
+    # Merge form data into layout
+    layout = update_layout_from_form(layout, form)
     # Flatten for DB
     def flatten(layout):
         out = []
@@ -311,13 +292,15 @@ def update_layout_submit(layout_id):
     session.pop('layout_data', None)
     return redirect(url_for('layout_view', layout_id=layout_id))
 
+
 # --- In-place update/add/edit/delete routes for layout_updater.html ---
 
 @app.route('/layout/update_add_domain/<int:layout_id>', methods=['POST'])
 def update_add_domain(layout_id):
     layout = get_layout()
     layout = update_layout_from_form(layout, request.form)
-    layout['domains'].append({'id': int(time.time()*1000), 'name': 'New Domain', 'subdomains': []})
+    new_domain_id = uuid.uuid4().int >> 96  # 32-bit int
+    layout['domains'].append({'id': new_domain_id, 'name': 'New Domain', 'subdomains': []})
     save_layout(layout)
     return render_template('layout_updater.html', **layout)
 
@@ -332,9 +315,10 @@ def update_edit_domain(layout_id, domain_id):
 def update_add_subdomain(layout_id, domain_id):
     layout = get_layout()
     layout = update_layout_from_form(layout, request.form)
+    new_sub_id = uuid.uuid4().int >> 96
     for d in layout['domains']:
         if d['id'] == domain_id:
-            d['subdomains'].append({'id': int(time.time()*1000), 'name': 'New Subdomain', 'questions': []})
+            d['subdomains'].append({'id': new_sub_id, 'name': 'New Subdomain', 'questions': []})
     save_layout(layout)
     return render_template('layout_updater.html', **layout)
 
@@ -359,11 +343,13 @@ def update_edit_subdomain(layout_id, domain_id, subdomain_id):
 def update_add_question(layout_id, domain_id, subdomain_id):
     layout = get_layout()
     layout = update_layout_from_form(layout, request.form)
+    new_q_id = uuid.uuid4().int >> 96
+    new_q_index = uuid.uuid4().int >> 112  # 16-bit for question_id
     for d in layout['domains']:
         if d['id'] == domain_id:
             for s in d['subdomains']:
                 if s['id'] == subdomain_id:
-                    s['questions'].append({'id': int(time.time()*1000), 'name': 'New Question', 'question_id': int(time.time()*1000)%100000})
+                    s['questions'].append({'id': new_q_id, 'name': 'New Question', 'question_id': new_q_index})
     save_layout(layout)
     return render_template('layout_updater.html', **layout)
 
