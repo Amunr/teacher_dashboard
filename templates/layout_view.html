@@ -13,6 +13,16 @@ layouts: List of dicts, each with:
 {% block title %}Layout View{% endblock %}
 
 {% block content %}
+<script>
+// Preserve scroll position on reload
+window.addEventListener('beforeunload', function() {
+    localStorage.setItem('scrollPos', window.scrollY);
+});
+window.addEventListener('DOMContentLoaded', function() {
+    var scrollPos = localStorage.getItem('scrollPos');
+    if (scrollPos) window.scrollTo(0, scrollPos);
+});
+</script>
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="fw-bold text-primary">

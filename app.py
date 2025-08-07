@@ -396,16 +396,21 @@ def update_edit_question(layout_id, domain_id, subdomain_id, question_id):
                 if qidkey in form:
                     q['question_id'] = int(form[qidkey])
 
-@app.route('/layout/update/<int:layout_id>/delete-domain/<int:domain_id>', methods=['POST'])
+@app.route('/layout/update_delete_domain/<int:layout_id>/<int:domain_id>', methods=['POST'])
 def update_delete_domain(layout_id, domain_id):
     try:
-        # Add your domain deletion logic here
-        # This is a placeholder - implement based on your database structure
+        layout = get_layout()
+        # Update layout from form to preserve any unsaved changes (new domains, subdomains, etc)
+        layout = update_layout_from_form(layout, request.form)
+        # Remove the domain with the given id
+        layout['domains'] = [d for d in layout.get('domains', []) if d['id'] != domain_id]
+        save_layout(layout)
         flash('Domain deleted successfully', 'success')
-        return redirect(f'/layout/update/{layout_id}')
+        return render_template('layout_updater.html', **layout)
     except Exception as e:
         flash(f'Error deleting domain: {str(e)}', 'error')
-        return redirect(f'/layout/update/{layout_id}')
+        layout = get_layout()
+        return render_template('layout_updater.html', **layout)
 
 
 

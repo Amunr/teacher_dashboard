@@ -30,6 +30,16 @@ current_year: int
 {% block title %}Layout Builder - Question Management{% endblock %}
 
 {% block content %}
+<script>
+// Preserve scroll position on reload
+window.addEventListener('beforeunload', function() {
+    localStorage.setItem('scrollPos', window.scrollY);
+});
+window.addEventListener('DOMContentLoaded', function() {
+    var scrollPos = localStorage.getItem('scrollPos');
+    if (scrollPos) window.scrollTo(0, scrollPos);
+});
+</script>
 <div class="container py-4">
     <script>
     // Minimal JS: On any CRUD button click, set form.action/form.method and submit the whole form

@@ -27,6 +27,16 @@ current_year: int
 {% block title %}Layout Viewer - Question Management{% endblock %}
 
 {% block content %}
+<script>
+// Preserve scroll position on reload
+window.addEventListener('beforeunload', function() {
+    localStorage.setItem('scrollPos', window.scrollY);
+});
+window.addEventListener('DOMContentLoaded', function() {
+    var scrollPos = localStorage.getItem('scrollPos');
+    if (scrollPos) window.scrollTo(0, scrollPos);
+});
+</script>
 <div class="container-fluid">
     <div class="row mb-4">
         <div class="col-12">
