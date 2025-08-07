@@ -64,7 +64,7 @@ window.addEventListener('DOMContentLoaded', function() {
             </h2>
         </div>
     </div>
-    <form method="post" action="{{ url_for('submit_layout') }}">
+    <form method="post" action="{{ url_for('layout.submit_layout') }}">
         <div class="row g-3 mb-4">
             <div class="col-md-4">
                 <label class="form-label fw-bold">Layout Name</label>
@@ -93,8 +93,8 @@ window.addEventListener('DOMContentLoaded', function() {
                                 <input type="text" class="form-control form-control-lg fw-bold text-primary border-2 border-primary rounded-3 bg-white px-3 py-2" name="domain_name_{{ domain.id }}" value="{{ domain.name }}" style="max-width: 100%; min-width: 200px;" onkeydown="return event.key != 'Enter';">
                             </div>
                             <div class="col-md-4 d-flex justify-content-end gap-2">
-                                <button type="submit" class="btn btn-outline-danger btn-sm" formmethod="post" formaction="{{ url_for('delete_domain', domain_id=domain.id) }}">Delete Domain</button>
-                                <button type="submit" class="btn btn-outline-success btn-sm" formmethod="post" formaction="{{ url_for('add_subdomain', domain_id=domain.id) }}">Add Subdomain</button>
+                                <button type="submit" class="btn btn-outline-danger btn-sm" formmethod="post" formaction="{{ url_for('layout.delete_domain', domain_id=domain.id) }}">Delete Domain</button>
+                                <button type="submit" class="btn btn-outline-success btn-sm" formmethod="post" formaction="{{ url_for('layout.add_subdomain', domain_id=domain.id) }}">Add Subdomain</button>
                             </div>
                         </div>
                     </div>
@@ -110,8 +110,8 @@ window.addEventListener('DOMContentLoaded', function() {
                                                 <input type="text" class="form-control form-control-lg fw-semibold text-secondary border-2 border-secondary rounded-3 bg-white px-3 py-2" name="subdomain_name_{{ domain.id }}_{{ sub.id }}" value="{{ sub.name }}" style="max-width: 100%; min-width: 180px;" onkeydown="return event.key != 'Enter';">
                                             </div>
                                             <div class="col-md-4 d-flex justify-content-end gap-2">
-                                                <button type="submit" class="btn btn-outline-danger btn-sm" formmethod="post" formaction="{{ url_for('delete_subdomain', domain_id=domain.id, subdomain_id=sub.id) }}">Delete Subdomain</button>
-                                                <button type="submit" class="btn btn-outline-success btn-sm" formmethod="post" formaction="{{ url_for('add_question', domain_id=domain.id, subdomain_id=sub.id) }}">Add Question</button>
+                                                <button type="submit" class="btn btn-outline-danger btn-sm" formmethod="post" formaction="{{ url_for('layout.delete_subdomain', domain_id=domain.id, subdomain_id=sub.id) }}">Delete Subdomain</button>
+                                                <button type="submit" class="btn btn-outline-success btn-sm" formmethod="post" formaction="{{ url_for('layout.add_question', domain_id=domain.id, subdomain_id=sub.id) }}">Add Question</button>
                                             </div>
                                         </div>
                                     </div>
@@ -127,7 +127,7 @@ window.addEventListener('DOMContentLoaded', function() {
                                                         <input type="number" class="form-control form-control-sm border-info border-2 rounded-3 bg-light" name="question_id_{{ domain.id }}_{{ sub.id }}_{{ q.id }}" value="{{ q.question_id }}" onkeydown="return event.key != 'Enter';">
                                                     </div>
                                                     <div class="col-md-4 d-flex align-items-center justify-content-center">
-                                                        <button type="submit" class="btn btn-outline-danger btn-sm px-4" style="min-width:120px;" formmethod="post" formaction="{{ url_for('delete_question', domain_id=domain.id, subdomain_id=sub.id, question_id=q.id) }}">Delete Question</button>
+                                                        <button type="submit" class="btn btn-outline-danger btn-sm px-4" style="min-width:120px;" formmethod="post" formaction="{{ url_for('layout.delete_question', domain_id=domain.id, subdomain_id=sub.id, question_id=q.id) }}">Delete Question</button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -186,7 +186,7 @@ window.addEventListener('DOMContentLoaded', function() {
         </div>
         <div class="row mt-4">
             <div class="col-md-6">
-                <button type="submit" class="btn btn-outline-success btn-lg w-100" formmethod="post" formaction="{{ url_for('add_domain') }}">
+                <button type="submit" class="btn btn-outline-success btn-lg w-100" formmethod="post" formaction="{{ url_for('layout.add_domain') }}">
                     <i class="bi bi-plus-circle me-2"></i>Add Domain
                 </button>
             </div>

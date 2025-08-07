@@ -40,7 +40,7 @@ function confirmDeleteLayout(layoutId, layoutName) {
         <h2 class="fw-bold text-primary">
             <i class="bi bi-collection"></i> Layouts
         </h2>
-        <a class="btn btn-success btn-lg" href="{{ url_for('layout_edit_new') }}">
+        <a class="btn btn-success btn-lg" href="{{ url_for('layout.layout_edit_new') }}">
             <i class="bi bi-plus-circle me-2"></i>New Layout
         </a>
     </div>
@@ -67,7 +67,7 @@ function confirmDeleteLayout(layoutId, layoutName) {
                         <i class="bi bi-clock-history me-1"></i>
                         Last Edited: {{ layout.date_edited }}
                     </p>
-                    <a href="{{ url_for('layout_view', layout_id=layout.layout_id) }}" class="btn btn-outline-primary w-100">
+                    <a href="{{ url_for('layout.layout_view', layout_id=layout.layout_id) }}" class="btn btn-outline-primary w-100">
                         <i class="bi bi-eye"></i> View
                     </a>
                 </div>
