@@ -227,7 +227,7 @@ def insert_response(json_data):
             }
             values_list.append(row)
     if values_list:
-        conn.execute(query,values_list)
+        conn.execute(query, values_list)
         conn.commit()  # Commit the transaction
 
 def insert_layout(json_data):
@@ -287,4 +287,5 @@ def fetch_questions(request=None):
     if request is not None:
         query = query.where(questions.c.layout_id == request)
     result = conn.execute(query).fetchall()
+    # No commit needed for read operation
     return [dict(row._mapping) for row in result]
