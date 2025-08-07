@@ -6,58 +6,6 @@ import time
 app = Flask(__name__)
 app.secret_key = 'dev'  # For session usage
 
-# --- IN-PLACE UPDATE ROUTES (for /update mode) ---
-@app.route('/layout/update_delete_domain/<int:layout_id>/<int:domain_id>', methods=['POST'])
-def update_delete_domain(layout_id, domain_id):
-    layout = get_layout()
-    layout = update_layout_from_form(layout, request.form)
-    layout['domains'] = [d for d in layout['domains'] if d['id'] != domain_id]
-    save_layout(layout)
-    return render_template('layout_updater.html', **layout)
-
-@app.route('/layout/update_add_subdomain/<int:layout_id>/<int:domain_id>', methods=['POST'])
-def update_add_subdomain(layout_id, domain_id):
-    layout = get_layout()
-    layout = update_layout_from_form(layout, request.form)
-    for d in layout['domains']:
-        if d['id'] == domain_id:
-            d['subdomains'].append({'id': int(time.time()*1000), 'name': 'New Subdomain', 'questions': []})
-    save_layout(layout)
-    return render_template('layout_updater.html', **layout)
-
-@app.route('/layout/update_delete_subdomain/<int:layout_id>/<int:domain_id>/<int:subdomain_id>', methods=['POST'])
-def update_delete_subdomain(layout_id, domain_id, subdomain_id):
-    layout = get_layout()
-    layout = update_layout_from_form(layout, request.form)
-    for d in layout['domains']:
-        if d['id'] == domain_id:
-            d['subdomains'] = [s for s in d['subdomains'] if s['id'] != subdomain_id]
-    save_layout(layout)
-    return render_template('layout_updater.html', **layout)
-
-@app.route('/layout/update_add_question/<int:layout_id>/<int:domain_id>/<int:subdomain_id>', methods=['POST'])
-def update_add_question(layout_id, domain_id, subdomain_id):
-    layout = get_layout()
-    layout = update_layout_from_form(layout, request.form)
-    for d in layout['domains']:
-        if d['id'] == domain_id:
-            for s in d['subdomains']:
-                if s['id'] == subdomain_id:
-                    s['questions'].append({'id': int(time.time()*1000), 'name': 'New Question', 'question_id': int(time.time()*1000)%100000})
-    save_layout(layout)
-    return render_template('layout_updater.html', **layout)
-
-@app.route('/layout/update_delete_question/<int:layout_id>/<int:domain_id>/<int:subdomain_id>/<int:question_id>', methods=['POST'])
-def update_delete_question(layout_id, domain_id, subdomain_id, question_id):
-    layout = get_layout()
-    layout = update_layout_from_form(layout, request.form)
-    for d in layout['domains']:
-        if d['id'] == domain_id:
-            for s in d['subdomains']:
-                if s['id'] == subdomain_id:
-                    s['questions'] = [q for q in s['questions'] if q['id'] != question_id]
-    save_layout(layout)
-    return render_template('layout_updater.html', **layout)
 from flask import Flask, render_template, request, redirect, url_for, session
 import database
 import time
