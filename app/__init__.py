@@ -6,8 +6,8 @@ import logging
 from flask import Flask
 from typing import Optional
 
-from .models import DatabaseManager, LayoutModel, ResponseModel
-from .services import LayoutService
+from .models import DatabaseManager, LayoutModel, ResponseModel, StudentCountModel
+from .services import LayoutService, DashboardService
 from .routes import dashboard_bp, layout_bp
 from config import get_config
 
@@ -100,6 +100,7 @@ def _initialize_database(app: Flask) -> None:
         # Create model instances
         app.layout_model = LayoutModel(db_manager)
         app.response_model = ResponseModel(db_manager)
+        app.student_count_model = StudentCountModel(db_manager)
         
         app.logger.info('Database initialized successfully')
         
@@ -113,6 +114,7 @@ def _initialize_services(app: Flask) -> None:
     try:
         # Create service instances
         app.layout_service = LayoutService(app.layout_model)
+        app.dashboard_service = DashboardService(app.db_manager)
         
         app.logger.info('Services initialized successfully')
         

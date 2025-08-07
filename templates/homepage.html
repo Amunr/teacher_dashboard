@@ -23,6 +23,28 @@
             </div>
             {% endfor %}
         </div>
+        
+        <!-- Date Range Filter -->
+        <div class="row g-4 mt-2">
+            <div class="col-md-3 col-sm-6">
+                <label for="startDate" class="form-label fw-bold">Start Date:</label>
+                <input type="date" class="form-control form-control-lg border-warning border-3 rounded-4" id="startDate" name="startDate">
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <label for="endDate" class="form-label fw-bold">End Date:</label>
+                <input type="date" class="form-control form-control-lg border-warning border-3 rounded-4" id="endDate" name="endDate">
+            </div>
+            <div class="col-md-3 col-sm-6 d-flex align-items-end">
+                <button type="button" class="btn btn-warning btn-lg rounded-4 fw-bold" id="applyFilters">
+                    Apply Filters
+                </button>
+            </div>
+            <div class="col-md-3 col-sm-6 d-flex align-items-end">
+                <button type="button" class="btn btn-outline-secondary btn-lg rounded-4" id="clearFilters">
+                    Clear All
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -34,7 +56,7 @@
                 <div class="row align-items-center">
                     <div class="col-md-8">
                         <h4 class="card-title fw-bold">
-                            <span id="readinessPercentage">75</span>% children who are school ready
+                            <span id="readinessPercentage">--</span>% children who are school ready
                         </h4>
                     </div>
                     <div class="col-md-4 text-center">
@@ -50,16 +72,16 @@
 
 <!-- Key Metrics Section -->
 <div class="row mb-5">
-    {% for title, id, color, value in [
-        ("A Total Students", "totalStudents", "primary", 150),
-        ("B Students assessed", "studentsAssessed", "success", 142),
-        ("C Class avg. score", "classAvgScore", "info", "78%")
+    {% for title, id, color in [
+        ("Total Students", "totalStudents", "primary"),
+        ("Students Assessed", "studentsAssessed", "success"),
+        ("Average Score", "classAvgScore", "info")
     ] %}
     <div class="col-md-4 mb-4">
         <div class="card border-dark border-3 rounded-4 shadow-lg h-100">
             <div class="card-body p-4 text-center">
                 <h6 class="card-title fw-bold mb-3">{{ title }}</h6>
-                <h2 class="text-{{ color }} fw-bold display-6" id="{{ id }}">{{ value }}</h2>
+                <h2 class="text-{{ color }} fw-bold display-6" id="{{ id }}">--</h2>
             </div>
         </div>
     </div>
@@ -124,11 +146,47 @@
                             <input type="hidden" id="selectedStudent" name="selectedStudent">
                         </div>
                     </div>
-                </div>
-                <div class="table-responsive">
-                    <div class="border border-2 rounded-4 p-5 text-center text-muted bg-light">
-                        <p class="mb-0 fs-5">Student list and their score per domain in different columns (can be scrolled to view all student data)</p>
+                    <div class="col-md-8 d-flex align-items-end">
+                        <div class="ms-auto">
+                            <span class="me-3">
+                                <strong>Total Students:</strong> <span id="studentListTotal">--</span>
+                            </span>
+                            <button class="btn btn-outline-primary" id="exportStudents">
+                                <i class="bi bi-download"></i> Export
+                            </button>
+                        </div>
                     </div>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover" id="studentTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Rank</th>
+                                <th>Student Name</th>
+                                <th>School</th>
+                                <th>Grade</th>
+                                <th>Teacher</th>
+                                <th>Overall Score</th>
+                                <th class="domain-headers"><!-- Dynamic domain columns --></th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentTableBody">
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="mt-2">Loading student data...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                <div class="d-flex justify-content-center mt-4" id="studentPagination">
+                    <!-- Pagination controls will be inserted here -->
                 </div>
             </div>
         </div>
@@ -137,7 +195,552 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// All JS logic should be modular and concise. See README for API integration details.
+// Dashboard state and data
+let dashboardData = {};
+let studentData = {};
+let currentPage = 1;
+let filters = {};
+let domainChart = null;
+let readinessChart = null;
+
+// Initialize dashboard on page load
+document.addEventListener('DOMContentLoaded', function() {
+    initializeFilters();
+    setDefaultDateRange();
+    loadDashboardData();
+    loadStudentList();
+    
+    // Set up event listeners
+    setupFilterListeners();
+    setupButtonListeners();
+});
+
+// Set default date range (last 365 days)
+function setDefaultDateRange() {
+    const today = new Date();
+    const lastYear = new Date(today);
+    lastYear.setFullYear(today.getFullYear() - 1);
+    
+    document.getElementById('startDate').value = formatDate(lastYear);
+    document.getElementById('endDate').value = formatDate(today);
+}
+
+// Format date for input
+function formatDate(date) {
+    return date.toISOString().split('T')[0];
+}
+
+// Initialize filter dropdowns
+async function initializeFilters() {
+    try {
+        const response = await fetch('/api/dashboard-data');
+        const data = await response.json();
+        
+        if (data.filter_options) {
+            setupFilterDropdown('schoolFilter', data.filter_options.school || []);
+            setupFilterDropdown('gradeFilter', data.filter_options.grade || []);
+            setupFilterDropdown('assessmentFilter', data.filter_options.assessment || []);
+            setupFilterDropdown('domainFilter', data.filter_options.domain || []);
+            setupFilterDropdown('studentFilter', data.filter_options.name || []);
+        }
+    } catch (error) {
+        console.error('Error loading filter options:', error);
+    }
+}
+
+// Setup individual filter dropdown
+function setupFilterDropdown(inputId, options) {
+    const input = document.getElementById(inputId);
+    const dropdown = document.getElementById(inputId.replace('Filter', 'Dropdown'));
+    
+    input.addEventListener('input', function() {
+        const query = this.value.toLowerCase();
+        const filtered = options.filter(option => 
+            option.toLowerCase().includes(query)
+        );
+        
+        showDropdown(dropdown, filtered, input);
+    });
+    
+    input.addEventListener('focus', function() {
+        showDropdown(dropdown, options, input);
+    });
+    
+    // Hide dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.remove('show');
+        }
+    });
+}
+
+// Show dropdown with options
+function showDropdown(dropdown, options, input) {
+    dropdown.innerHTML = '';
+    
+    if (options.length === 0) {
+        dropdown.classList.remove('show');
+        return;
+    }
+    
+    options.slice(0, 10).forEach(option => {
+        const item = document.createElement('a');
+        item.className = 'dropdown-item';
+        item.href = '#';
+        item.textContent = option;
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
+            input.value = option;
+            dropdown.classList.remove('show');
+        });
+        dropdown.appendChild(item);
+    });
+    
+    dropdown.classList.add('show');
+}
+
+// Setup event listeners
+function setupFilterListeners() {
+    // Apply filters button
+    document.getElementById('applyFilters').addEventListener('click', function() {
+        collectFilters();
+        loadDashboardData();
+        loadStudentList();
+    });
+    
+    // Clear filters button
+    document.getElementById('clearFilters').addEventListener('click', function() {
+        clearAllFilters();
+        loadDashboardData();
+        loadStudentList();
+    });
+    
+    // Auto-apply on enter key
+    document.querySelectorAll('input').forEach(input => {
+        input.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                collectFilters();
+                loadDashboardData();
+                loadStudentList();
+            }
+        });
+    });
+}
+
+// Setup button listeners
+function setupButtonListeners() {
+    // Export students
+    document.getElementById('exportStudents').addEventListener('click', function() {
+        exportStudentData();
+    });
+}
+
+// Collect current filter values
+function collectFilters() {
+    filters = {
+        school: document.getElementById('schoolFilter').value,
+        grade: document.getElementById('gradeFilter').value,
+        assessment: document.getElementById('assessmentFilter').value,
+        domain: document.getElementById('domainFilter').value,
+        student_name: document.getElementById('studentFilter').value,
+        start_date: document.getElementById('startDate').value,
+        end_date: document.getElementById('endDate').value
+    };
+    
+    // Remove empty filters
+    Object.keys(filters).forEach(key => {
+        if (!filters[key]) {
+            delete filters[key];
+        }
+    });
+}
+
+// Clear all filters
+function clearAllFilters() {
+    document.getElementById('schoolFilter').value = '';
+    document.getElementById('gradeFilter').value = '';
+    document.getElementById('assessmentFilter').value = '';
+    document.getElementById('domainFilter').value = '';
+    document.getElementById('studentFilter').value = '';
+    setDefaultDateRange();
+    filters = {};
+}
+
+// Load dashboard data
+async function loadDashboardData() {
+    try {
+        const params = new URLSearchParams(filters);
+        const response = await fetch(`/api/dashboard-data?${params}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            console.error('API Error:', data.error);
+            return;
+        }
+        
+        dashboardData = data;
+        updateDashboardUI(data);
+        updateCharts(data);
+        
+    } catch (error) {
+        console.error('Error loading dashboard data:', error);
+    }
+}
+
+// Update dashboard UI elements
+function updateDashboardUI(data) {
+    // Update metrics
+    document.getElementById('totalStudents').textContent = data.total_students || '--';
+    document.getElementById('studentsAssessed').textContent = data.total_students_assessed || '--';
+    document.getElementById('classAvgScore').textContent = data.average_score ? `${data.average_score}%` : '--';
+    document.getElementById('readinessPercentage').textContent = data.average_score || '--';
+    
+    // Update skills lists
+    updateSkillsList('glowingSkills', data.glowing_skills || []);
+    updateSkillsList('growingSkills', data.growing_skills || []);
+}
+
+// Update skills lists
+function updateSkillsList(elementId, skills) {
+    const element = document.getElementById(elementId);
+    element.innerHTML = '';
+    
+    if (skills.length === 0) {
+        element.innerHTML = '<li class="mb-2 text-muted">No data available</li>';
+        return;
+    }
+    
+    skills.forEach(skill => {
+        const li = document.createElement('li');
+        li.className = 'mb-2 fw-semibold';
+        const skillName = skill.domain || skill.subdomain || 'Unknown';
+        const score = Math.round(skill.score || 0);
+        li.textContent = `• ${skillName} (${score}%)`;
+        element.appendChild(li);
+    });
+}
+
+// Update charts
+function updateCharts(data) {
+    updateDomainChart(data);
+    updateReadinessGauge(data);
+}
+
+// Update domain chart
+function updateDomainChart(data) {
+    const ctx = document.getElementById('domainChart').getContext('2d');
+    
+    // Destroy existing chart
+    if (domainChart) {
+        domainChart.destroy();
+    }
+    
+    // Determine chart data based on filters
+    let chartData = [];
+    let chartLabels = [];
+    let chartTitle = 'Average Student Scores in Different Domains';
+    
+    if (filters.domain && data.subdomain_scores && data.subdomain_scores.length > 0) {
+        // Show subdomains if domain is filtered
+        chartData = data.subdomain_scores.map(item => item.score);
+        chartLabels = data.subdomain_scores.map(item => item.subdomain);
+        chartTitle = `Subdomain Scores in ${filters.domain}`;
+    } else if (data.domain_scores && data.domain_scores.length > 0) {
+        // Show domains
+        chartData = data.domain_scores.map(item => item.score);
+        chartLabels = data.domain_scores.map(item => item.domain);
+    }
+    
+    // Update chart title
+    document.querySelector('#domainChart').closest('.card-body').querySelector('h4').textContent = chartTitle;
+    
+    if (chartData.length === 0) {
+        // Show "no data" message
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#6c757d';
+        ctx.fillText('No data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
+        return;
+    }
+    
+    domainChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: chartLabels,
+            datasets: [{
+                label: 'Average Score (%)',
+                data: chartData,
+                backgroundColor: 'rgba(255, 193, 7, 0.8)',
+                borderColor: 'rgba(255, 193, 7, 1)',
+                borderWidth: 2,
+                borderRadius: 8,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                },
+                x: {
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 0
+                    }
+                }
+            },
+            animation: {
+                duration: 800,
+                easing: 'easeOutQuart'
+            }
+        }
+    });
+}
+
+// Update readiness gauge
+function updateReadinessGauge(data) {
+    const canvas = document.getElementById('readinessGauge');
+    const ctx = canvas.getContext('2d');
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const radius = 35;
+    const percentage = data.average_score || 0;
+    const angle = (percentage / 100) * Math.PI;
+    
+    // Draw background arc
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, Math.PI, 2 * Math.PI);
+    ctx.strokeStyle = '#e9ecef';
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    
+    // Draw progress arc
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, Math.PI, Math.PI + angle);
+    ctx.strokeStyle = percentage >= 70 ? '#28a745' : percentage >= 50 ? '#ffc107' : '#dc3545';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    
+    // Draw percentage text
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#333';
+    ctx.fillText(Math.round(percentage) + '%', centerX, centerY + 5);
+}
+
+// Load student list
+async function loadStudentList(page = 1) {
+    try {
+        const params = new URLSearchParams({
+            ...filters,
+            page: page,
+            per_page: 20
+        });
+        
+        const response = await fetch(`/api/student-list?${params}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            console.error('API Error:', data.error);
+            return;
+        }
+        
+        studentData = data;
+        currentPage = page;
+        updateStudentTable(data);
+        updateStudentPagination(data.pagination);
+        
+    } catch (error) {
+        console.error('Error loading student list:', error);
+    }
+}
+
+// Update student table
+function updateStudentTable(data) {
+    const tbody = document.getElementById('studentTableBody');
+    const domains = data.domains || [];
+    
+    // Update domain headers
+    updateDomainHeaders(domains);
+    
+    // Update total count
+    document.getElementById('studentListTotal').textContent = data.pagination.total || 0;
+    
+    // Clear existing rows
+    tbody.innerHTML = '';
+    
+    if (!data.students || data.students.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="${6 + domains.length}" class="text-center text-muted py-4">
+                    No students found with current filters
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    // Add student rows
+    data.students.forEach((student, index) => {
+        const rank = ((currentPage - 1) * 20) + index + 1;
+        const row = document.createElement('tr');
+        
+        let domainCells = '';
+        domains.forEach(domain => {
+            const domainScore = student.domain_scores[domain];
+            const score = domainScore ? Math.round(domainScore.percentage) : '--';
+            domainCells += `<td class="text-center">${score}${score !== '--' ? '%' : ''}</td>`;
+        });
+        
+        row.innerHTML = `
+            <td class="fw-bold">${rank}</td>
+            <td>${student.name || '--'}</td>
+            <td>${student.school || '--'}</td>
+            <td>${student.grade || '--'}</td>
+            <td>${student.teacher || '--'}</td>
+            <td class="fw-bold text-primary">${Math.round(student.percentage)}%</td>
+            ${domainCells}
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+// Update domain headers
+function updateDomainHeaders(domains) {
+    const headerCell = document.querySelector('.domain-headers');
+    const headerRow = headerCell.parentNode;
+    
+    // Remove existing domain headers
+    const existingHeaders = headerRow.querySelectorAll('.dynamic-domain-header');
+    existingHeaders.forEach(header => header.remove());
+    
+    // Add new domain headers
+    domains.forEach(domain => {
+        const th = document.createElement('th');
+        th.className = 'dynamic-domain-header text-center';
+        th.textContent = domain;
+        headerRow.appendChild(th);
+    });
+    
+    // Remove the placeholder cell
+    headerCell.remove();
+}
+
+// Update student pagination
+function updateStudentPagination(pagination) {
+    const container = document.getElementById('studentPagination');
+    container.innerHTML = '';
+    
+    if (pagination.pages <= 1) return;
+    
+    const nav = document.createElement('nav');
+    const ul = document.createElement('ul');
+    ul.className = 'pagination';
+    
+    // Previous button
+    if (pagination.page > 1) {
+        ul.appendChild(createPaginationItem('Previous', pagination.page - 1, false));
+    }
+    
+    // Page numbers
+    const startPage = Math.max(1, pagination.page - 2);
+    const endPage = Math.min(pagination.pages, pagination.page + 2);
+    
+    for (let i = startPage; i <= endPage; i++) {
+        ul.appendChild(createPaginationItem(i, i, i === pagination.page));
+    }
+    
+    // Next button
+    if (pagination.page < pagination.pages) {
+        ul.appendChild(createPaginationItem('Next', pagination.page + 1, false));
+    }
+    
+    nav.appendChild(ul);
+    container.appendChild(nav);
+}
+
+// Create pagination item
+function createPaginationItem(text, page, isActive) {
+    const li = document.createElement('li');
+    li.className = `page-item ${isActive ? 'active' : ''}`;
+    
+    const a = document.createElement('a');
+    a.className = 'page-link';
+    a.href = '#';
+    a.textContent = text;
+    a.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (!isActive) {
+            loadStudentList(page);
+        }
+    });
+    
+    li.appendChild(a);
+    return li;
+}
+
+// Export student data
+function exportStudentData() {
+    if (!studentData.students || studentData.students.length === 0) {
+        alert('No student data to export');
+        return;
+    }
+    
+    // Create CSV content
+    const domains = studentData.domains || [];
+    const headers = ['Rank', 'Student Name', 'School', 'Grade', 'Teacher', 'Overall Score', ...domains];
+    
+    let csvContent = headers.join(',') + '\n';
+    
+    studentData.students.forEach((student, index) => {
+        const rank = ((currentPage - 1) * 20) + index + 1;
+        const row = [
+            rank,
+            `"${student.name || ''}"`,
+            `"${student.school || ''}"`,
+            `"${student.grade || ''}"`,
+            `"${student.teacher || ''}"`,
+            `${Math.round(student.percentage)}%`,
+            ...domains.map(domain => {
+                const domainScore = student.domain_scores[domain];
+                return domainScore ? `${Math.round(domainScore.percentage)}%` : '';
+            })
+        ];
+        csvContent += row.join(',') + '\n';
+    });
+    
+    // Download CSV
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `student_scores_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+}
 </script>
 {% endblock %}

@@ -3,9 +3,23 @@ Data validation utilities.
 """
 from typing import Dict, Any, List
 import re
-from datetime import datetime
+from datetime import datetime, date
 
 from .exceptions import ValidationError
+
+
+def validate_date_range(start_date: date, end_date: date) -> bool:
+    """
+    Validate that start_date is before end_date.
+    
+    Args:
+        start_date: Start date
+        end_date: End date
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    return start_date < end_date
 
 
 def validate_layout_data(layout_data: Dict[str, Any]) -> None:

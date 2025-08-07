@@ -91,6 +91,16 @@ class DatabaseManager:
             Column('Index_ID', Integer),
             Column('Response', Integer)
         )
+        
+        # Student counts table for manual total student entries
+        self.student_counts_table = Table(
+            'student_counts', self.meta,
+            Column('id', Integer, primary_key=True),
+            Column('start_date', Date, nullable=False),
+            Column('end_date', Date, nullable=False),
+            Column('total_students', Integer, nullable=False),
+            Column('description', String(255))
+        )
     
     @contextmanager
     def get_connection(self):
@@ -413,12 +423,15 @@ class ResponseModel:
     def __init__(self, db_manager: DatabaseManager):
         self.db = db_manager
     
-    def create_response(self, response_data: Dict[str, Any]) -> None:
+    def create_response(self, response_data: Dict[str, Any]) -> int:
         """
         Create a new response record.
         
         Args:
             response_data: Response data dictionary
+            
+        Returns:
+            The created res_id
         """
         try:
             with self.db.get_connection() as conn:
@@ -434,7 +447,7 @@ class ResponseModel:
                 result = conn.execute(max_query).fetchone()
                 next_res_id = (result[0] + 1) if result[0] is not None else 1
                 
-                # Get valid Index_IDs
+                # Get valid Index_IDs for today's date
                 valid_query = select(self.db.questions_table).where(
                     (self.db.questions_table.c.year_start <= today) &
                     (self.db.questions_table.c.year_end >= today) &
@@ -493,6 +506,452 @@ class ResponseModel:
                     conn.commit()
                     logger.info(f"Created response {next_res_id} with {len(values_list)} items")
                 
+                return next_res_id
+                
         except Exception as e:
             logger.error(f"Failed to create response: {e}")
+            raise
+    
+    def get_responses(self, filters: Dict[str, Any] = None, limit: int = None, offset: int = None) -> List[Dict[str, Any]]:
+        """
+        Get responses with optional filtering.
+        
+        Args:
+            filters: Dictionary of filter criteria
+            limit: Maximum number of records to return
+            offset: Number of records to skip
+            
+        Returns:
+            List of response dictionaries
+        """
+        try:
+            with self.db.get_connection() as conn:
+                # Join responses with questions to get domain/subdomain info
+                query = select(
+                    self.db.responses_table.c['res-id'],
+                    self.db.responses_table.c.School,
+                    self.db.responses_table.c.Grade,
+                    self.db.responses_table.c.Teacher,
+                    self.db.responses_table.c.Assessment,
+                    self.db.responses_table.c.Name,
+                    self.db.responses_table.c.Date,
+                    self.db.responses_table.c.Index_ID,
+                    self.db.responses_table.c.Response,
+                    self.db.questions_table.c.Domain,
+                    self.db.questions_table.c.SubDomain,
+                    self.db.questions_table.c.Name.label('Question_Name')
+                ).select_from(
+                    self.db.responses_table.join(
+                        self.db.questions_table,
+                        self.db.responses_table.c.Index_ID == self.db.questions_table.c.Index_ID
+                    )
+                )
+                
+                # Apply filters
+                if filters:
+                    if 'school' in filters and filters['school']:
+                        query = query.where(self.db.responses_table.c.School.ilike(f"%{filters['school']}%"))
+                    if 'grade' in filters and filters['grade']:
+                        query = query.where(self.db.responses_table.c.Grade.ilike(f"%{filters['grade']}%"))
+                    if 'teacher' in filters and filters['teacher']:
+                        query = query.where(self.db.responses_table.c.Teacher.ilike(f"%{filters['teacher']}%"))
+                    if 'assessment' in filters and filters['assessment']:
+                        query = query.where(self.db.responses_table.c.Assessment.ilike(f"%{filters['assessment']}%"))
+                    if 'student_name' in filters and filters['student_name']:
+                        query = query.where(self.db.responses_table.c.Name.ilike(f"%{filters['student_name']}%"))
+                    if 'domain' in filters and filters['domain']:
+                        query = query.where(self.db.questions_table.c.Domain.ilike(f"%{filters['domain']}%"))
+                    if 'start_date' in filters and filters['start_date']:
+                        query = query.where(self.db.responses_table.c.Date >= filters['start_date'])
+                    if 'end_date' in filters and filters['end_date']:
+                        query = query.where(self.db.responses_table.c.Date <= filters['end_date'])
+                
+                # Add ordering
+                query = query.order_by(self.db.responses_table.c.Date.desc(), self.db.responses_table.c['res-id'].desc())
+                
+                # Apply pagination
+                if limit:
+                    query = query.limit(limit)
+                if offset:
+                    query = query.offset(offset)
+                
+                result = conn.execute(query).fetchall()
+                return [dict(row._mapping) for row in result]
+                
+        except Exception as e:
+            logger.error(f"Failed to get responses: {e}")
+            raise
+    
+    def get_dashboard_data(self, filters: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Get aggregated data for dashboard display.
+        
+        Args:
+            filters: Dictionary of filter criteria
+            
+        Returns:
+            Dashboard data dictionary
+        """
+        try:
+            with self.db.get_connection() as conn:
+                today = date.today()
+                
+                # Set default date range to last 365 days if not provided
+                if not filters:
+                    filters = {}
+                if 'start_date' not in filters:
+                    filters['start_date'] = date(today.year - 1, today.month, today.day)
+                if 'end_date' not in filters:
+                    filters['end_date'] = today
+                
+                # Build base query for valid responses
+                base_query = select(
+                    self.db.responses_table.c['res-id'],
+                    self.db.responses_table.c.Date,
+                    self.db.responses_table.c.Response,
+                    self.db.questions_table.c.Domain,
+                    self.db.questions_table.c.SubDomain
+                ).select_from(
+                    self.db.responses_table.join(
+                        self.db.questions_table,
+                        (self.db.responses_table.c.Index_ID == self.db.questions_table.c.Index_ID) &
+                        (self.db.responses_table.c.Date >= self.db.questions_table.c.year_start) &
+                        (self.db.responses_table.c.Date <= self.db.questions_table.c.year_end) &
+                        (self.db.questions_table.c.Domain != "MetaData")
+                    )
+                )
+                
+                # Apply filters to base query
+                if filters.get('school'):
+                    base_query = base_query.where(self.db.responses_table.c.School.ilike(f"%{filters['school']}%"))
+                if filters.get('grade'):
+                    base_query = base_query.where(self.db.responses_table.c.Grade.ilike(f"%{filters['grade']}%"))
+                if filters.get('teacher'):
+                    base_query = base_query.where(self.db.responses_table.c.Teacher.ilike(f"%{filters['teacher']}%"))
+                if filters.get('assessment'):
+                    base_query = base_query.where(self.db.responses_table.c.Assessment.ilike(f"%{filters['assessment']}%"))
+                if filters.get('student_name'):
+                    base_query = base_query.where(self.db.responses_table.c.Name.ilike(f"%{filters['student_name']}%"))
+                if filters.get('domain'):
+                    base_query = base_query.where(self.db.questions_table.c.Domain.ilike(f"%{filters['domain']}%"))
+                if filters.get('start_date'):
+                    base_query = base_query.where(self.db.responses_table.c.Date >= filters['start_date'])
+                if filters.get('end_date'):
+                    base_query = base_query.where(self.db.responses_table.c.Date <= filters['end_date'])
+                
+                responses = conn.execute(base_query).fetchall()
+                
+                if not responses:
+                    return {
+                        'total_students_assessed': 0,
+                        'total_students': 0,
+                        'average_score': 0,
+                        'glowing_skills': [],
+                        'growing_skills': [],
+                        'domain_scores': [],
+                        'subdomain_scores': []
+                    }
+                
+                # Calculate metrics
+                unique_res_ids = set(r['res-id'] for r in responses)
+                total_students_assessed = len(unique_res_ids)
+                
+                # Get manual total student count for date range
+                total_students = self._get_total_students_for_date_range(
+                    conn, filters['start_date'], filters['end_date']
+                )
+                
+                # Calculate scores by res_id
+                res_scores = {}
+                res_question_counts = {}
+                for response in responses:
+                    res_id = response['res-id']
+                    if res_id not in res_scores:
+                        res_scores[res_id] = 0
+                        res_question_counts[res_id] = 0
+                    res_scores[res_id] += response['Response']
+                    res_question_counts[res_id] += 1
+                
+                # Calculate percentage scores
+                student_scores = []
+                for res_id in res_scores:
+                    if res_question_counts[res_id] > 0:
+                        percent_score = (res_scores[res_id] / res_question_counts[res_id]) * 100
+                        student_scores.append(percent_score)
+                
+                average_score = sum(student_scores) / len(student_scores) if student_scores else 0
+                
+                # Calculate domain averages
+                domain_data = {}
+                for response in responses:
+                    domain = response['Domain']
+                    if domain not in domain_data:
+                        domain_data[domain] = []
+                    domain_data[domain].append(response['Response'])
+                
+                domain_scores = []
+                for domain, scores in domain_data.items():
+                    avg_score = (sum(scores) / len(scores)) * 100 if scores else 0
+                    domain_scores.append({'domain': domain, 'score': avg_score})
+                
+                domain_scores.sort(key=lambda x: x['score'], reverse=True)
+                
+                # Get glowing and growing skills
+                glowing_skills = domain_scores[:2] if len(domain_scores) >= 2 else domain_scores
+                growing_skills = domain_scores[-2:] if len(domain_scores) >= 2 else []
+                
+                # Calculate subdomain scores if domain filter is applied
+                subdomain_scores = []
+                if filters.get('domain'):
+                    subdomain_data = {}
+                    for response in responses:
+                        if response['Domain'].lower() == filters['domain'].lower():
+                            subdomain = response['SubDomain']
+                            if subdomain not in subdomain_data:
+                                subdomain_data[subdomain] = []
+                            subdomain_data[subdomain].append(response['Response'])
+                    
+                    for subdomain, scores in subdomain_data.items():
+                        avg_score = (sum(scores) / len(scores)) * 100 if scores else 0
+                        subdomain_scores.append({'subdomain': subdomain, 'score': avg_score})
+                    
+                    subdomain_scores.sort(key=lambda x: x['score'], reverse=True)
+                
+                return {
+                    'total_students_assessed': total_students_assessed,
+                    'total_students': total_students,
+                    'average_score': round(average_score, 1),
+                    'glowing_skills': glowing_skills,
+                    'growing_skills': growing_skills,
+                    'domain_scores': domain_scores,
+                    'subdomain_scores': subdomain_scores
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to get dashboard data: {e}")
+            raise
+    
+    def delete_responses(self, res_ids: List[int]) -> int:
+        """
+        Delete responses by res_id.
+        
+        Args:
+            res_ids: List of res_id values to delete
+            
+        Returns:
+            Number of deleted records
+        """
+        try:
+            with self.db.get_connection() as conn:
+                delete_query = delete(self.db.responses_table).where(
+                    self.db.responses_table.c['res-id'].in_(res_ids)
+                )
+                result = conn.execute(delete_query)
+                conn.commit()
+                
+                deleted_count = result.rowcount
+                logger.info(f"Deleted {deleted_count} response records for res_ids: {res_ids}")
+                return deleted_count
+                
+        except Exception as e:
+            logger.error(f"Failed to delete responses: {e}")
+            raise
+    
+    def get_orphaned_responses(self) -> List[Dict[str, Any]]:
+        """
+        Get responses that don't have valid question mappings for their dates.
+        
+        Returns:
+            List of orphaned response dictionaries
+        """
+        try:
+            with self.db.get_connection() as conn:
+                # Find responses without valid question mappings
+                query = select(self.db.responses_table).where(
+                    ~self.db.responses_table.c.Index_ID.in_(
+                        select(self.db.questions_table.c.Index_ID).where(
+                            (self.db.responses_table.c.Date >= self.db.questions_table.c.year_start) &
+                            (self.db.responses_table.c.Date <= self.db.questions_table.c.year_end)
+                        )
+                    )
+                )
+                
+                result = conn.execute(query).fetchall()
+                return [dict(row._mapping) for row in result]
+                
+        except Exception as e:
+            logger.error(f"Failed to get orphaned responses: {e}")
+            raise
+    
+    def get_filter_options(self) -> Dict[str, List[str]]:
+        """
+        Get available filter options for the dashboard.
+        
+        Returns:
+            Dictionary with lists of available filter values
+        """
+        try:
+            with self.db.get_connection() as conn:
+                options = {}
+                
+                # Get distinct values for each filter field
+                for field in ['School', 'Grade', 'Teacher', 'Assessment', 'Name']:
+                    query = select(self.db.responses_table.c[field]).distinct().where(
+                        self.db.responses_table.c[field].isnot(None) &
+                        (self.db.responses_table.c[field] != '')
+                    ).order_by(self.db.responses_table.c[field])
+                    
+                    result = conn.execute(query).fetchall()
+                    options[field.lower()] = [row[0] for row in result if row[0]]
+                
+                # Get distinct domains
+                domain_query = select(self.db.questions_table.c.Domain).distinct().where(
+                    (self.db.questions_table.c.Domain.isnot(None)) &
+                    (self.db.questions_table.c.Domain != '') &
+                    (self.db.questions_table.c.Domain != 'MetaData')
+                ).order_by(self.db.questions_table.c.Domain)
+                
+                result = conn.execute(domain_query).fetchall()
+                options['domain'] = [row[0] for row in result if row[0]]
+                
+                return options
+                
+        except Exception as e:
+            logger.error(f"Failed to get filter options: {e}")
+            raise
+    
+    def _get_total_students_for_date_range(self, conn, start_date: date, end_date: date) -> int:
+        """
+        Get manual total student count for a date range.
+        
+        Args:
+            conn: Database connection
+            start_date: Start date
+            end_date: End date
+            
+        Returns:
+            Total student count
+        """
+        try:
+            query = select(self.db.student_counts_table.c.total_students).where(
+                (self.db.student_counts_table.c.start_date <= start_date) &
+                (self.db.student_counts_table.c.end_date >= end_date)
+            ).order_by(self.db.student_counts_table.c.end_date.desc()).limit(1)
+            
+            result = conn.execute(query).fetchone()
+            return result[0] if result else 0
+            
+        except Exception as e:
+            logger.warning(f"Failed to get total student count: {e}")
+            return 0
+
+
+class StudentCountModel:
+    """Model for student count operations."""
+    
+    def __init__(self, db_manager: DatabaseManager):
+        self.db = db_manager
+    
+    def create_student_count(self, start_date: date, end_date: date, total_students: int, description: str = None) -> int:
+        """
+        Create a new student count entry.
+        
+        Args:
+            start_date: Start date of the range
+            end_date: End date of the range
+            total_students: Total number of students
+            description: Optional description
+            
+        Returns:
+            Created record ID
+        """
+        try:
+            with self.db.get_connection() as conn:
+                insert_query = insert(self.db.student_counts_table).values(
+                    start_date=start_date,
+                    end_date=end_date,
+                    total_students=total_students,
+                    description=description
+                )
+                
+                result = conn.execute(insert_query)
+                conn.commit()
+                
+                logger.info(f"Created student count entry: {total_students} students from {start_date} to {end_date}")
+                return result.inserted_primary_key[0]
+                
+        except Exception as e:
+            logger.error(f"Failed to create student count: {e}")
+            raise
+    
+    def get_all_student_counts(self) -> List[Dict[str, Any]]:
+        """
+        Get all student count entries.
+        
+        Returns:
+            List of student count dictionaries
+        """
+        try:
+            with self.db.get_connection() as conn:
+                query = select(self.db.student_counts_table).order_by(
+                    self.db.student_counts_table.c.end_date.desc()
+                )
+                result = conn.execute(query).fetchall()
+                return [dict(row._mapping) for row in result]
+                
+        except Exception as e:
+            logger.error(f"Failed to get student counts: {e}")
+            raise
+    
+    def update_student_count(self, count_id: int, start_date: date, end_date: date, total_students: int, description: str = None) -> None:
+        """
+        Update a student count entry.
+        
+        Args:
+            count_id: ID of the record to update
+            start_date: Start date of the range
+            end_date: End date of the range
+            total_students: Total number of students
+            description: Optional description
+        """
+        try:
+            with self.db.get_connection() as conn:
+                update_query = update(self.db.student_counts_table).where(
+                    self.db.student_counts_table.c.id == count_id
+                ).values(
+                    start_date=start_date,
+                    end_date=end_date,
+                    total_students=total_students,
+                    description=description,
+                    updated_at=date.today()
+                )
+                
+                conn.execute(update_query)
+                conn.commit()
+                
+                logger.info(f"Updated student count entry {count_id}")
+                
+        except Exception as e:
+            logger.error(f"Failed to update student count {count_id}: {e}")
+            raise
+    
+    def delete_student_count(self, count_id: int) -> None:
+        """
+        Delete a student count entry.
+        
+        Args:
+            count_id: ID of the record to delete
+        """
+        try:
+            with self.db.get_connection() as conn:
+                delete_query = delete(self.db.student_counts_table).where(
+                    self.db.student_counts_table.c.id == count_id
+                )
+                conn.execute(delete_query)
+                conn.commit()
+                
+                logger.info(f"Deleted student count entry {count_id}")
+                
+        except Exception as e:
+            logger.error(f"Failed to delete student count {count_id}: {e}")
             raise

@@ -1,0 +1,435 @@
+{% extends "layout.html" %}
+
+{% block title %}Maintenance Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="fw-bold">Maintenance Dashboard</h2>
+            <p class="text-muted">Manage responses, student counts, and system data</p>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <ul class="nav nav-tabs" id="maintenanceTabs">
+                <li class="nav-item">
+                    <a class="nav-link active" id="responses-tab" data-bs-toggle="tab" href="#responses">
+                        Responses <span class="badge bg-primary">{{ pagination.total }}</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="student-counts-tab" data-bs-toggle="tab" href="#student-counts">
+                        Student Counts <span class="badge bg-success">{{ student_counts|length }}</span>
+                    </a>
+                </li>
+                {% if orphaned_responses %}
+                <li class="nav-item">
+                    <a class="nav-link text-warning" id="orphaned-tab" data-bs-toggle="tab" href="#orphaned">
+                        Orphaned Responses <span class="badge bg-warning">{{ orphaned_responses|length }}</span>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+
+    <div class="tab-content" id="maintenanceTabContent">
+        <!-- Responses Tab -->
+        <div class="tab-pane fade show active" id="responses" role="tabpanel">
+            <div class="row mb-3">
+                <div class="col-md-8">
+                    <h4>Response Records</h4>
+                    <p class="text-muted">View and manage all response data</p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <button class="btn btn-danger" id="deleteSelectedBtn" disabled>
+                        <i class="bi bi-trash"></i> Delete Selected
+                    </button>
+                </div>
+            </div>
+
+            <!-- Responses Table -->
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>
+                                        <input type="checkbox" id="selectAll" class="form-check-input">
+                                    </th>
+                                    <th>Res ID</th>
+                                    <th>Student Name</th>
+                                    <th>School</th>
+                                    <th>Grade</th>
+                                    <th>Teacher</th>
+                                    <th>Assessment</th>
+                                    <th>Date</th>
+                                    <th>Domain</th>
+                                    <th>Question</th>
+                                    <th>Response</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for response in responses %}
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input response-select" 
+                                               value="{{ response['res-id'] }}" data-res-id="{{ response['res-id'] }}">
+                                    </td>
+                                    <td>{{ response['res-id'] }}</td>
+                                    <td>{{ response.Name or '-' }}</td>
+                                    <td>{{ response.School or '-' }}</td>
+                                    <td>{{ response.Grade or '-' }}</td>
+                                    <td>{{ response.Teacher or '-' }}</td>
+                                    <td>{{ response.Assessment or '-' }}</td>
+                                    <td>{{ response.Date or '-' }}</td>
+                                    <td>{{ response.Domain or '-' }}</td>
+                                    <td>{{ response.Question_Name or '-' }}</td>
+                                    <td>{{ response.Response }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if pagination.pages > 1 %}
+                    <div class="d-flex justify-content-center mt-3">
+                        <nav>
+                            <ul class="pagination">
+                                {% if pagination.page > 1 %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ pagination.page - 1 }}">Previous</a>
+                                </li>
+                                {% endif %}
+                                
+                                {% for page_num in range(1, pagination.pages + 1) %}
+                                <li class="page-item {{ 'active' if page_num == pagination.page else '' }}">
+                                    <a class="page-link" href="?page={{ page_num }}">{{ page_num }}</a>
+                                </li>
+                                {% endfor %}
+                                
+                                {% if pagination.page < pagination.pages %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ pagination.page + 1 }}">Next</a>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Student Counts Tab -->
+        <div class="tab-pane fade" id="student-counts" role="tabpanel">
+            <div class="row mb-3">
+                <div class="col-md-8">
+                    <h4>Total Student Counts</h4>
+                    <p class="text-muted">Manage manual student count entries for different date ranges</p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#studentCountModal">
+                        <i class="bi bi-plus"></i> Add New Count
+                    </button>
+                </div>
+            </div>
+
+            <!-- Student Counts Table -->
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Start Date</th>
+                                    <th>End Date</th>
+                                    <th>Total Students</th>
+                                    <th>Description</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for count in student_counts %}
+                                <tr>
+                                    <td>{{ count.id }}</td>
+                                    <td>{{ count.start_date }}</td>
+                                    <td>{{ count.end_date }}</td>
+                                    <td>{{ count.total_students }}</td>
+                                    <td>{{ count.description or '-' }}</td>
+                                    <td>{{ count.created_at }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-primary edit-count-btn" 
+                                                data-id="{{ count.id }}"
+                                                data-start="{{ count.start_date }}"
+                                                data-end="{{ count.end_date }}"
+                                                data-total="{{ count.total_students }}"
+                                                data-description="{{ count.description or '' }}">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger delete-count-btn" 
+                                                data-id="{{ count.id }}">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Orphaned Responses Tab -->
+        {% if orphaned_responses %}
+        <div class="tab-pane fade" id="orphaned" role="tabpanel">
+            <div class="row mb-3">
+                <div class="col-12">
+                    <h4 class="text-warning">Orphaned Responses</h4>
+                    <p class="text-muted">Responses without valid question mappings for their dates</p>
+                </div>
+            </div>
+
+            <div class="card border-warning">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead class="table-warning">
+                                <tr>
+                                    <th>Res ID</th>
+                                    <th>Student Name</th>
+                                    <th>Date</th>
+                                    <th>Index ID</th>
+                                    <th>Response</th>
+                                    <th>Issue</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for response in orphaned_responses %}
+                                <tr>
+                                    <td>{{ response['res-id'] }}</td>
+                                    <td>{{ response.Name or '-' }}</td>
+                                    <td>{{ response.Date or '-' }}</td>
+                                    <td>{{ response.Index_ID }}</td>
+                                    <td>{{ response.Response }}</td>
+                                    <td><span class="badge bg-warning">No question mapping for date</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Student Count Modal -->
+<div class="modal fade" id="studentCountModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="studentCountModalTitle">Add Student Count</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="studentCountForm">
+                    <input type="hidden" id="countId" name="countId">
+                    <div class="mb-3">
+                        <label for="startDate" class="form-label">Start Date</label>
+                        <input type="date" class="form-control" id="startDate" name="startDate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="endDate" class="form-label">End Date</label>
+                        <input type="date" class="form-control" id="endDate" name="endDate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="totalStudents" class="form-label">Total Students</label>
+                        <input type="number" class="form-control" id="totalStudents" name="totalStudents" 
+                               min="0" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description (Optional)</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="saveStudentCount">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Select all functionality
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const responseCheckboxes = document.querySelectorAll('.response-select');
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+
+    selectAllCheckbox.addEventListener('change', function() {
+        responseCheckboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+        });
+        updateDeleteButton();
+    });
+
+    responseCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateDeleteButton);
+    });
+
+    function updateDeleteButton() {
+        const checkedBoxes = document.querySelectorAll('.response-select:checked');
+        deleteSelectedBtn.disabled = checkedBoxes.length === 0;
+        
+        // Update select all checkbox state
+        if (checkedBoxes.length === 0) {
+            selectAllCheckbox.indeterminate = false;
+            selectAllCheckbox.checked = false;
+        } else if (checkedBoxes.length === responseCheckboxes.length) {
+            selectAllCheckbox.indeterminate = false;
+            selectAllCheckbox.checked = true;
+        } else {
+            selectAllCheckbox.indeterminate = true;
+        }
+    }
+
+    // Delete selected responses
+    deleteSelectedBtn.addEventListener('click', function() {
+        const checkedBoxes = document.querySelectorAll('.response-select:checked');
+        const resIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
+        
+        if (resIds.length === 0) return;
+
+        if (confirm(`Are you sure you want to delete ${resIds.length} response record(s)?`)) {
+            fetch('/api/maintenance/delete-responses', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ res_ids: resIds })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to delete responses');
+            });
+        }
+    });
+
+    // Student count modal functionality
+    const modal = new bootstrap.Modal(document.getElementById('studentCountModal'));
+    const form = document.getElementById('studentCountForm');
+    const saveBtn = document.getElementById('saveStudentCount');
+
+    // Edit student count
+    document.querySelectorAll('.edit-count-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = this.dataset.id;
+            const startDate = this.dataset.start;
+            const endDate = this.dataset.end;
+            const total = this.dataset.total;
+            const description = this.dataset.description;
+
+            document.getElementById('studentCountModalTitle').textContent = 'Edit Student Count';
+            document.getElementById('countId').value = id;
+            document.getElementById('startDate').value = startDate;
+            document.getElementById('endDate').value = endDate;
+            document.getElementById('totalStudents').value = total;
+            document.getElementById('description').value = description;
+
+            modal.show();
+        });
+    });
+
+    // Add new student count
+    document.querySelector('[data-bs-target="#studentCountModal"]').addEventListener('click', function() {
+        document.getElementById('studentCountModalTitle').textContent = 'Add Student Count';
+        form.reset();
+        document.getElementById('countId').value = '';
+    });
+
+    // Save student count
+    saveBtn.addEventListener('click', function() {
+        const formData = new FormData(form);
+        const data = {
+            start_date: formData.get('startDate'),
+            end_date: formData.get('endDate'),
+            total_students: parseInt(formData.get('totalStudents')),
+            description: formData.get('description')
+        };
+
+        const countId = formData.get('countId');
+        const url = countId ? `/api/maintenance/student-counts/${countId}` : '/api/maintenance/student-counts';
+        const method = countId ? 'PUT' : 'POST';
+
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                modal.hide();
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to save student count');
+        });
+    });
+
+    // Delete student count
+    document.querySelectorAll('.delete-count-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = this.dataset.id;
+            
+            if (confirm('Are you sure you want to delete this student count entry?')) {
+                fetch(`/api/maintenance/student-counts/${id}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to delete student count');
+                });
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
