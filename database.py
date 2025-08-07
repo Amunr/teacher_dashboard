@@ -3,11 +3,11 @@ def fetch_all_layouts():
     query = select(
         questions.c.layout_id,
         questions.c.layout_name,
-        func.max(questions.c.__table__.c['Date edited']).label('date_edited'),
+        func.max(questions.c['Date edited']).label('date_edited'),
         func.max(questions.c.year_end).label('year_end'),
         func.max(questions.c.year_start).label('year_start')
     ).group_by(questions.c.layout_id, questions.c.layout_name)
-    result = conn.execute(query).fetchall()
+    result = conn.execute(query).mappings().all()
     # Mark the most recent as current
     if not result:
         return []
@@ -29,9 +29,11 @@ def fetch_layout_jinja(layout_id):
     if not rows:
         return None
     layout_name = rows[0].get('layout_name', f'Layout #{layout_id}')
-    # Find min/max year_start/year_end
-    year_start = min([r['year_start'] for r in rows if r['year_start']])
-    year_end = max([r['year_end'] for r in rows if r['year_end']])
+    # Find min/max year_start/year_end robustly
+    year_starts = [r['year_start'] for r in rows if r['year_start']]
+    year_ends = [r['year_end'] for r in rows if r['year_end']]
+    year_start = min(year_starts) if year_starts else ''
+    year_end = max(year_ends) if year_ends else ''
     # Group domains/subdomains/questions
     domains = {}
     metadata_list = []
@@ -198,16 +200,24 @@ def insert_layout(json_data):
     result = conn.execute(read).fetchone()
     layout_id = (result[0] + 1) if result[0] is not None else 1
 
+    from datetime import datetime
     values = []
     for item in json_data:
+        def to_date(val):
+            if isinstance(val, str):
+                try:
+                    return datetime.strptime(val, "%Y-%m-%d").date()
+                except Exception:
+                    return None
+            return val
         values.append({
-            'year_start': item['year_start'],
-            'year_end': item['year_end'],
+            'year_start': to_date(item['year_start']),
+            'year_end': to_date(item['year_end']),
             'Domain': item['Domain'],
             'SubDomain': item['SubDomain'],
             'Index_ID': item['Index_ID'],
             'Name': item['Name'],
-            'Date edited': item['Date edited'],
+            'Date edited': to_date(item['Date edited']),
             'layout_id': layout_id,
             'layout_name': item['layout_name']
         })
@@ -233,4 +243,4 @@ def fetch_questions(request=None):
     if request is not None:
         query = query.where(questions.c.layout_id == request)
     result = conn.execute(query).fetchall()
-    return [dict(row) for row in result]
+    return [dict(row._mapping) for row in result]
