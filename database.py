@@ -1,3 +1,32 @@
+def update_layout_inplace(layout_id, json_data):
+    """Delete all rows for layout_id and insert new rows for a true in-place update."""
+    # Delete all rows for this layout_id
+    delete_query = questions.delete().where(questions.c.layout_id == layout_id)
+    conn.execute(delete_query)
+    # Insert new rows (with the same layout_id)
+    from datetime import datetime
+    values = []
+    for item in json_data:
+        def to_date(val):
+            if isinstance(val, str):
+                try:
+                    return datetime.strptime(val, "%Y-%m-%d").date()
+                except Exception:
+                    return None
+            return val
+        values.append({
+            'year_start': to_date(item['year_start']),
+            'year_end': to_date(item['year_end']),
+            'Domain': item['Domain'],
+            'SubDomain': item['SubDomain'],
+            'Index_ID': item['Index_ID'],
+            'Name': item['Name'],
+            'Date edited': to_date(item['Date edited']),
+            'layout_id': layout_id,
+            'layout_name': item['layout_name']
+        })
+    if values:
+        conn.execute(questions.insert(), values)
 def fetch_all_layouts():
     """Return a list of all layouts, grouped by layout_id, with layout_name, date_edited, is_current."""
     query = select(
