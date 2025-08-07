@@ -3,6 +3,8 @@ def update_layout_inplace(layout_id, json_data):
     # Delete all rows for this layout_id
     delete_query = questions.delete().where(questions.c.layout_id == layout_id)
     conn.execute(delete_query)
+    conn.commit()  # Commit the deletion
+    
     # Insert new rows (with the same layout_id)
     from datetime import datetime
     values = []
@@ -27,6 +29,7 @@ def update_layout_inplace(layout_id, json_data):
         })
     if values:
         conn.execute(questions.insert(), values)
+        conn.commit()  # Commit the insertion
 def fetch_all_layouts():
     """Return a list of all layouts, grouped by layout_id, with layout_name, date_edited, is_current."""
     query = select(
@@ -225,6 +228,7 @@ def insert_response(json_data):
             values_list.append(row)
     if values_list:
         conn.execute(query,values_list)
+        conn.commit()  # Commit the transaction
 
 def insert_layout(json_data):
     query = insert(questions)
@@ -255,6 +259,7 @@ def insert_layout(json_data):
         })
     if values:
         conn.execute(query, values)
+        conn.commit()  # Commit the transaction
 
 def update_layout(layout_id, json_data):
     query = questions.update().where(questions.c.layout_id == json_data['layout_id'])
@@ -269,6 +274,13 @@ def update_layout(layout_id, json_data):
         'layout_name': json_data['layout_name']
     }
     conn.execute(query.values(values))
+    conn.commit()  # Commit the transaction
+
+def delete_layout(layout_id):
+    """Delete all rows for a specific layout_id."""
+    delete_query = questions.delete().where(questions.c.layout_id == layout_id)
+    conn.execute(delete_query)
+    conn.commit()  # Commit the deletion
 
 def fetch_questions(request=None):
     query = select(questions)

@@ -2,7 +2,6 @@
 from flask import Flask, flash, render_template, request, redirect, url_for, session
 import database
 import time
-import uuid
 
 app = Flask(__name__)
 app.secret_key = 'dev'  # For session usage
@@ -24,6 +23,15 @@ def layout_view(layout_id):
     if not layout:
         return "Layout not found", 404
     return render_template('layout_viewer.html', **layout)
+@app.route('/layout/delete/<int:layout_id>', methods=['POST'])
+def delete_layout_route(layout_id):
+    try:
+        database.delete_layout(layout_id)
+        flash('Layout deleted successfully.', 'success')
+        return redirect(url_for('layout_list'))
+    except Exception as e:
+        flash(f'Error deleting layout: {str(e)}', 'error')
+        return redirect(url_for('layout_view', layout_id=layout_id))
 
 @app.route('/layout/edit/new', methods=['GET'])
 def layout_edit_new():
@@ -58,7 +66,6 @@ def save_layout(layout):
 def update_layout_from_form(layout, form):
     layout['layout_name'] = form.get('layout_name', 'New Layout')
     layout['layout_start_date'] = form.get('layout_start_date')
-# --- In-place update submit route for layout_updater.html ---
     layout['layout_end_date'] = form.get('layout_end_date')
     # Build a map of existing metadata by id and name
     meta_by_id = {str(meta['id']): meta for meta in layout.get('metadata_list', [])}
@@ -248,13 +255,36 @@ def submit_layout():
     session.pop('layout_data', None)
     return redirect(url_for('layout_list'))
 
-# --- In-place update submit route for layout_updater.html ---
-@app.route('/layout/update_submit/<int:layout_id>', methods=['POST'])
+
+# --- In-place update/add/edit/delete routes for layout_updater.html ---
+
+# SUBMIT route for layout_updater.html (update existing layout)
+@app.route('/layout/update/<int:layout_id>/submit', methods=['POST'])
 def update_layout_submit(layout_id):
     form = request.form
     layout = get_layout()
-    # Merge form data into layout
-    layout = update_layout_from_form(layout, form)
+    layout['layout_name'] = form.get('layout_name', 'New Layout')
+    layout['layout_start_date'] = form.get('layout_start_date')
+    layout['layout_end_date'] = form.get('layout_end_date')
+    for meta in layout.get('metadata_list', []):
+        key = f"metadata_id_{meta['id']}"
+        if key in form:
+            meta['question_id'] = int(form[key])
+    for domain in layout.get('domains', []):
+        dkey = f"domain_name_{domain['id']}"
+        if dkey in form:
+            domain['name'] = form[dkey]
+        for sub in domain.get('subdomains', []):
+            skey = f"subdomain_name_{domain['id']}_{sub['id']}"
+            if skey in form:
+                sub['name'] = form[skey]
+            for q in sub.get('questions', []):
+                qkey = f"question_name_{domain['id']}_{sub['id']}_{q['id']}"
+                qidkey = f"question_id_{domain['id']}_{sub['id']}_{q['id']}"
+                if qkey in form:
+                    q['name'] = form[qkey]
+                if qidkey in form:
+                    q['question_id'] = int(form[qidkey])
     # Flatten for DB
     def flatten(layout):
         out = []
@@ -287,20 +317,15 @@ def update_layout_submit(layout_id):
                 'layout_name': layout.get('layout_name', 'New Layout')
             })
         return out
-    # Remove all old rows and insert new for this layout_id
     database.update_layout_inplace(layout_id, flatten(layout))
     session.pop('layout_data', None)
     return redirect(url_for('layout_view', layout_id=layout_id))
-
-
-# --- In-place update/add/edit/delete routes for layout_updater.html ---
 
 @app.route('/layout/update_add_domain/<int:layout_id>', methods=['POST'])
 def update_add_domain(layout_id):
     layout = get_layout()
     layout = update_layout_from_form(layout, request.form)
-    new_domain_id = uuid.uuid4().int >> 96  # 32-bit int
-    layout['domains'].append({'id': new_domain_id, 'name': 'New Domain', 'subdomains': []})
+    layout['domains'].append({'id': int(time.time()*1000), 'name': 'New Domain', 'subdomains': []})
     save_layout(layout)
     return render_template('layout_updater.html', **layout)
 
@@ -315,10 +340,9 @@ def update_edit_domain(layout_id, domain_id):
 def update_add_subdomain(layout_id, domain_id):
     layout = get_layout()
     layout = update_layout_from_form(layout, request.form)
-    new_sub_id = uuid.uuid4().int >> 96
     for d in layout['domains']:
         if d['id'] == domain_id:
-            d['subdomains'].append({'id': new_sub_id, 'name': 'New Subdomain', 'questions': []})
+            d['subdomains'].append({'id': int(time.time()*1000), 'name': 'New Subdomain', 'questions': []})
     save_layout(layout)
     return render_template('layout_updater.html', **layout)
 
@@ -343,13 +367,11 @@ def update_edit_subdomain(layout_id, domain_id, subdomain_id):
 def update_add_question(layout_id, domain_id, subdomain_id):
     layout = get_layout()
     layout = update_layout_from_form(layout, request.form)
-    new_q_id = uuid.uuid4().int >> 96
-    new_q_index = uuid.uuid4().int >> 112  # 16-bit for question_id
     for d in layout['domains']:
         if d['id'] == domain_id:
             for s in d['subdomains']:
                 if s['id'] == subdomain_id:
-                    s['questions'].append({'id': new_q_id, 'name': 'New Question', 'question_id': new_q_index})
+                    s['questions'].append({'id': int(time.time()*1000), 'name': 'New Question', 'question_id': int(time.time()*1000)%100000})
     save_layout(layout)
     return render_template('layout_updater.html', **layout)
 
@@ -396,60 +418,13 @@ def update_edit_question(layout_id, domain_id, subdomain_id, question_id):
                 if qidkey in form:
                     q['question_id'] = int(form[qidkey])
 
-@app.route('/layout/update_delete_domain/<int:layout_id>/<int:domain_id>', methods=['POST'])
+@app.route('/layout/update/<int:layout_id>/delete-domain/<int:domain_id>', methods=['POST'])
 def update_delete_domain(layout_id, domain_id):
-    try:
-        layout = get_layout()
-        # Update layout from form to preserve any unsaved changes (new domains, subdomains, etc)
-        layout = update_layout_from_form(layout, request.form)
-        # Remove the domain with the given id
-        layout['domains'] = [d for d in layout.get('domains', []) if d['id'] != domain_id]
-        save_layout(layout)
-        flash('Domain deleted successfully', 'success')
-        return render_template('layout_updater.html', **layout)
-    except Exception as e:
-        flash(f'Error deleting domain: {str(e)}', 'error')
-        layout = get_layout()
-        return render_template('layout_updater.html', **layout)
-
-
-
-    # Flatten for DB
-    def flatten(layout):
-        out = []
-        for domain in layout.get('domains', []):
-            dname = domain.get('name', '')
-            for sub in domain.get('subdomains', []):
-                sdname = sub.get('name', '')
-                for q in sub.get('questions', []):
-                    out.append({
-                        'year_start': layout.get('layout_start_date'),
-                        'year_end': layout.get('layout_end_date'),
-                        'Domain': dname,
-                        'SubDomain': sdname,
-                        'Index_ID': q.get('question_id', 0),
-                        'Name': q.get('name', ''),
-                        'Date edited': layout.get('layout_start_date'),
-                        'layout_id': layout_id,
-                        'layout_name': layout.get('layout_name', 'New Layout')
-                    })
-        for meta in layout.get('metadata_list', []):
-            out.append({
-                'year_start': layout.get('layout_start_date'),
-                'year_end': layout.get('layout_end_date'),
-                'Domain': 'MetaData',
-                'SubDomain': '',
-                'Index_ID': meta.get('question_id', 0),
-                'Name': meta.get('name', ''),
-                'Date edited': layout.get('layout_start_date'),
-                'layout_id': layout_id,
-                'layout_name': layout.get('layout_name', 'New Layout')
-            })
-        return out
-    # Remove all old rows and insert new for this layout_id
-    database.update_layout_inplace(layout_id, flatten(layout))
-    session.pop('layout_data', None)
-    return redirect(url_for('layout_view', layout_id=layout_id))
+    layout = get_layout()
+    layout = update_layout_from_form(layout, request.form)
+    layout['domains'] = [d for d in layout['domains'] if d['id'] != domain_id]
+    save_layout(layout)
+    return render_template('layout_updater.html', **layout)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
