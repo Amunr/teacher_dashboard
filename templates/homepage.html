@@ -3,6 +3,17 @@
 {% block title %}Student Assessment Dashboard{% endblock %}
 
 {% block content %}
+<!-- JavaScript Status Notice -->
+<div class="alert alert-info border-3 rounded-4 mb-4" id="jsNotice">
+    <div class="d-flex align-items-center">
+        <i class="bi bi-info-circle fs-4 me-3"></i>
+        <div>
+            <strong>Loading Dashboard...</strong>
+            <p class="mb-0">If filters and charts don't appear in a few seconds, JavaScript may be disabled. Basic data is shown below.</p>
+        </div>
+    </div>
+</div>
+
 <!-- Filters Section -->
 <div class="row mb-5">
     <div class="col-12">
@@ -56,7 +67,7 @@
                 <div class="row align-items-center">
                     <div class="col-md-8">
                         <h4 class="card-title fw-bold">
-                            <span id="readinessPercentage">--</span>% children who are school ready
+                            <span id="readinessPercentage">{{ initial_data.school_readiness_percent|round(1) if initial_data and initial_data.school_readiness_percent is not none else '--' }}</span>% children who are school ready
                         </h4>
                     </div>
                     <div class="col-md-4 text-center">
@@ -72,20 +83,30 @@
 
 <!-- Key Metrics Section -->
 <div class="row mb-5">
-    {% for title, id, color in [
-        ("Total Students", "totalStudents", "primary"),
-        ("Students Assessed", "studentsAssessed", "success"),
-        ("Average Score", "classAvgScore", "info")
-    ] %}
     <div class="col-md-4 mb-4">
         <div class="card border-dark border-3 rounded-4 shadow-lg h-100">
             <div class="card-body p-4 text-center">
-                <h6 class="card-title fw-bold mb-3">{{ title }}</h6>
-                <h2 class="text-{{ color }} fw-bold display-6" id="{{ id }}">--</h2>
+                <h6 class="card-title fw-bold mb-3">Total Students</h6>
+                <h2 class="text-primary fw-bold display-6" id="totalStudents">{{ initial_data.total_students if initial_data and initial_data.total_students else '--' }}</h2>
             </div>
         </div>
     </div>
-    {% endfor %}
+    <div class="col-md-4 mb-4">
+        <div class="card border-dark border-3 rounded-4 shadow-lg h-100">
+            <div class="card-body p-4 text-center">
+                <h6 class="card-title fw-bold mb-3">Students Assessed</h6>
+                <h2 class="text-success fw-bold display-6" id="studentsAssessed">{{ initial_data.total_students_assessed if initial_data and initial_data.total_students_assessed else '--' }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card border-dark border-3 rounded-4 shadow-lg h-100">
+            <div class="card-body p-4 text-center">
+                <h6 class="card-title fw-bold mb-3">Average Score</h6>
+                <h2 class="text-info fw-bold display-6" id="classAvgScore">{{ (initial_data.average_score|round(1) ~ '%') if initial_data and initial_data.average_score else '--' }}</h2>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Skills Overview Section -->
@@ -97,8 +118,14 @@
                     <i class="bi bi-lightbulb text-warning fs-4"></i> Glowing Skills
                 </h6>
                 <ul class="list-unstyled mb-0" id="glowingSkills">
-                    <li class="mb-2 fw-semibold">• Skill 1 name</li>
-                    <li class="mb-2 fw-semibold">• Skill 2 name</li>
+                    {% if initial_data and initial_data.glowing_skills %}
+                        {% for skill in initial_data.glowing_skills[:3] %}
+                        <li class="mb-2 fw-semibold">• {{ skill.domain or skill.subdomain or 'Unknown' }} ({{ skill.score|round }}%)</li>
+                        {% endfor %}
+                    {% else %}
+                        <li class="mb-2 fw-semibold">• Skill 1 name</li>
+                        <li class="mb-2 fw-semibold">• Skill 2 name</li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
@@ -110,8 +137,14 @@
                     <i class="bi bi-exclamation-triangle text-danger fs-4"></i> Growing Skills
                 </h6>
                 <ul class="list-unstyled mb-0" id="growingSkills">
-                    <li class="mb-2 fw-semibold">• Skill 1 name</li>
-                    <li class="mb-2 fw-semibold">• Skill 2 name</li>
+                    {% if initial_data and initial_data.growing_skills %}
+                        {% for skill in initial_data.growing_skills[:3] %}
+                        <li class="mb-2 fw-semibold">• {{ skill.domain or skill.subdomain or 'Unknown' }} ({{ skill.score|round }}%)</li>
+                        {% endfor %}
+                    {% else %}
+                        <li class="mb-2 fw-semibold">• Skill 1 name</li>
+                        <li class="mb-2 fw-semibold">• Skill 2 name</li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
@@ -207,6 +240,14 @@ let readinessChart = null;
 
 // Initialize dashboard on page load
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Dashboard initializing...');
+    
+    // Hide the JavaScript notice
+    const jsNotice = document.getElementById('jsNotice');
+    if (jsNotice) {
+        jsNotice.style.display = 'none';
+    }
+    
     initializeFilters();
     setDefaultDateRange();
     loadDashboardData();
@@ -371,9 +412,13 @@ function clearAllFilters() {
 // Load dashboard data
 async function loadDashboardData() {
     try {
+        console.log('Loading dashboard data...');
         const params = new URLSearchParams(filters);
+        console.log('Filters:', filters);
         const response = await fetch(`/api/dashboard-data?${params}`);
+        console.log('Response status:', response.status);
         const data = await response.json();
+        console.log('Response data:', data);
         
         if (data.error) {
             console.error('API Error:', data.error);
@@ -395,7 +440,7 @@ function updateDashboardUI(data) {
     document.getElementById('totalStudents').textContent = data.total_students || '--';
     document.getElementById('studentsAssessed').textContent = data.total_students_assessed || '--';
     document.getElementById('classAvgScore').textContent = data.average_score ? `${data.average_score}%` : '--';
-    document.getElementById('readinessPercentage').textContent = data.average_score || '--';
+    document.getElementById('readinessPercentage').textContent = data.school_readiness_percent !== undefined && data.school_readiness_percent !== null ? data.school_readiness_percent : '--';
     
     // Update skills lists
     updateSkillsList('glowingSkills', data.glowing_skills || []);
@@ -524,7 +569,7 @@ function updateReadinessGauge(data) {
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
     const radius = 35;
-    const percentage = data.average_score || 0;
+    const percentage = data.school_readiness_percent || 0;
     const angle = (percentage / 100) * Math.PI;
     
     // Draw background arc

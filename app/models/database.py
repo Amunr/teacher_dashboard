@@ -652,8 +652,20 @@ class ResponseModel:
                         'subdomain_scores': []
                     }
                 
+                # Convert rows to dictionaries for easier access
+                response_dicts = []
+                for row in responses:
+                    response_dict = {
+                        'res-id': row[0],
+                        'Date': row[1],
+                        'Response': row[2],
+                        'Domain': row[3],
+                        'SubDomain': row[4]
+                    }
+                    response_dicts.append(response_dict)
+                
                 # Calculate metrics
-                unique_res_ids = set(r['res-id'] for r in responses)
+                unique_res_ids = set(r['res-id'] for r in response_dicts)
                 total_students_assessed = len(unique_res_ids)
                 
                 # Get manual total student count for date range
@@ -664,7 +676,7 @@ class ResponseModel:
                 # Calculate scores by res_id
                 res_scores = {}
                 res_question_counts = {}
-                for response in responses:
+                for response in response_dicts:
                     res_id = response['res-id']
                     if res_id not in res_scores:
                         res_scores[res_id] = 0
@@ -672,18 +684,57 @@ class ResponseModel:
                     res_scores[res_id] += response['Response']
                     res_question_counts[res_id] += 1
                 
-                # Calculate percentage scores
+                # Calculate percentage scores (scale 1-4, so percentage out of 4)
                 student_scores = []
                 for res_id in res_scores:
                     if res_question_counts[res_id] > 0:
-                        percent_score = (res_scores[res_id] / res_question_counts[res_id]) * 100
+                        avg_score = res_scores[res_id] / res_question_counts[res_id]
+                        percent_score = (avg_score / 4) * 100  # Convert 1-4 scale to percentage
                         student_scores.append(percent_score)
                 
                 average_score = sum(student_scores) / len(student_scores) if student_scores else 0
                 
+                # Calculate school readiness: students scoring >80% in ALL domains
+                school_ready_students = 0
+                
+                # Get unique domains from responses
+                all_domains = set(response['Domain'] for response in response_dicts)
+                
+                # For each student, calculate their score in each domain
+                for res_id in res_scores:
+                    student_domain_scores = {}
+                    
+                    # Calculate domain averages for this student
+                    for response in response_dicts:
+                        if response['res-id'] == res_id:
+                            domain = response['Domain']
+                            if domain not in student_domain_scores:
+                                student_domain_scores[domain] = []
+                            student_domain_scores[domain].append(response['Response'])
+                    
+                    # Check if student scores >80% in ALL domains
+                    is_school_ready = True
+                    for domain in all_domains:
+                        if domain in student_domain_scores:
+                            domain_avg = sum(student_domain_scores[domain]) / len(student_domain_scores[domain])
+                            domain_percent = (domain_avg / 4) * 100
+                            if domain_percent <= 80:
+                                is_school_ready = False
+                                break
+                        else:
+                            # Student has no responses in this domain
+                            is_school_ready = False
+                            break
+                    
+                    if is_school_ready:
+                        school_ready_students += 1
+                
+                # Calculate school readiness percentage
+                school_readiness_percent = (school_ready_students / total_students_assessed * 100) if total_students_assessed > 0 else 0
+                
                 # Calculate domain averages
                 domain_data = {}
-                for response in responses:
+                for response in response_dicts:
                     domain = response['Domain']
                     if domain not in domain_data:
                         domain_data[domain] = []
@@ -691,8 +742,9 @@ class ResponseModel:
                 
                 domain_scores = []
                 for domain, scores in domain_data.items():
-                    avg_score = (sum(scores) / len(scores)) * 100 if scores else 0
-                    domain_scores.append({'domain': domain, 'score': avg_score})
+                    avg_score = sum(scores) / len(scores) if scores else 0
+                    percent_score = (avg_score / 4) * 100  # Convert 1-4 scale to percentage
+                    domain_scores.append({'domain': domain, 'score': round(percent_score, 1)})
                 
                 domain_scores.sort(key=lambda x: x['score'], reverse=True)
                 
@@ -704,7 +756,7 @@ class ResponseModel:
                 subdomain_scores = []
                 if filters.get('domain'):
                     subdomain_data = {}
-                    for response in responses:
+                    for response in response_dicts:
                         if response['Domain'].lower() == filters['domain'].lower():
                             subdomain = response['SubDomain']
                             if subdomain not in subdomain_data:
@@ -712,8 +764,9 @@ class ResponseModel:
                             subdomain_data[subdomain].append(response['Response'])
                     
                     for subdomain, scores in subdomain_data.items():
-                        avg_score = (sum(scores) / len(scores)) * 100 if scores else 0
-                        subdomain_scores.append({'subdomain': subdomain, 'score': avg_score})
+                        avg_score = sum(scores) / len(scores) if scores else 0
+                        percent_score = (avg_score / 4) * 100  # Convert 1-4 scale to percentage
+                        subdomain_scores.append({'subdomain': subdomain, 'score': round(percent_score, 1)})
                     
                     subdomain_scores.sort(key=lambda x: x['score'], reverse=True)
                 
@@ -721,6 +774,7 @@ class ResponseModel:
                     'total_students_assessed': total_students_assessed,
                     'total_students': total_students,
                     'average_score': round(average_score, 1),
+                    'school_readiness_percent': round(school_readiness_percent, 1),
                     'glowing_skills': glowing_skills,
                     'growing_skills': growing_skills,
                     'domain_scores': domain_scores,

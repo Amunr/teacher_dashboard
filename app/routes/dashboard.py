@@ -1,16 +1,29 @@
 """
 Dashboard and main application routes.
 """
-from flask import Blueprint, render_template, current_app, request, jsonify
+from flask import Blueprint, render_template, current_app, request, jsonify, send_from_directory
 from typing import Dict, Any
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+import os
 
 from ..services import LayoutService, DashboardService
 from ..utils import log_operation
 
 logger = logging.getLogger(__name__)
 dashboard_bp = Blueprint('dashboard', __name__)
+
+
+@dashboard_bp.route('/test')
+def test_dashboard():
+    """Test dashboard page."""
+    return send_from_directory('.', 'test_dashboard.html')
+
+
+@dashboard_bp.route('/debug')
+def debug_dashboard():
+    """Debug dashboard page."""
+    return render_template('debug_dashboard.html')
 
 
 @dashboard_bp.route('/')
@@ -23,7 +36,17 @@ def home() -> str:
     """
     try:
         log_operation('dashboard_home_accessed')
-        return render_template('homepage.html')
+        
+        # Get initial dashboard data for server-side rendering
+        dashboard_service = DashboardService(current_app.db_manager)
+        filters = {
+            'start_date': datetime.now() - timedelta(days=365),
+            'end_date': datetime.now()
+        }
+        initial_data = dashboard_service.get_dashboard_data(filters)
+        current_app.logger.info(f"Initial data keys: {list(initial_data.keys()) if initial_data else 'None'}")
+        
+        return render_template('homepage.html', initial_data=initial_data)
     except Exception as e:
         logger.error(f"Error rendering homepage: {e}")
         current_app.logger.error(f"Homepage error: {e}")
