@@ -110,15 +110,19 @@ class SheetsPollerService:
             
             logger.info(f"Sheet has {total_rows} rows, last processed: {last_row_processed}")
             
-            # Skip header row (if exists) and already processed rows
-            start_row = max(1, last_row_processed + 1)  # Start from row 1 or after last processed
-            new_rows = rows[start_row - 1:]  # Convert to 0-based indexing
+            # ALWAYS skip the first row (header) - start from row 2
+            # If last_row_processed is 0, we start from row 2 (index 1)
+            # If last_row_processed is > 0, we start from the next row after it
+            start_row = max(2, last_row_processed + 1)  # Start from row 2 or after last processed
             
-            if not new_rows:
+            if start_row > total_rows:
                 logger.info("No new rows to process")
                 return 0
             
-            logger.info(f"Processing {len(new_rows)} new rows (starting from row {start_row})")
+            # Get new rows to process (convert to 0-based indexing)
+            new_rows = rows[start_row - 1:]  
+            
+            logger.info(f"Processing {len(new_rows)} new rows (starting from row {start_row}, skipping header)")
             
             processed_count = 0
             last_successful_row = last_row_processed

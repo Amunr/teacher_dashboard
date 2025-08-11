@@ -1625,7 +1625,19 @@ class SheetsImportService:
             
             total_rows = len(rows)
             
-            if total_rows <= last_row_processed:
+            if total_rows <= 1:  # Only header or empty
+                return {
+                    'success': True,
+                    'processed_rows': 0,
+                    'message': 'No data rows to process (only header found)'
+                }
+            
+            # ALWAYS skip the first row (header) - start from row 2
+            # If last_row_processed is 0, we start from row 2
+            # If last_row_processed is > 0, we start from the next row after it
+            start_row = max(2, last_row_processed + 1)
+            
+            if start_row > total_rows:
                 return {
                     'success': True,
                     'processed_rows': 0,
@@ -1635,13 +1647,17 @@ class SheetsImportService:
             processed_count = 0
             failed_count = 0
             
-            # Process new rows (skip header if last_row_processed is 0)
-            start_row = max(1 if last_row_processed == 0 else last_row_processed + 1, 1)
-            
+            # Process new rows (skip header at index 0)
             for row_number in range(start_row, total_rows + 1):
                 try:
                     if row_number <= len(rows):
                         row_data = rows[row_number - 1]  # Convert to 0-based index
+                        
+                        # Skip empty rows
+                        if not any(cell.strip() for cell in row_data if cell):
+                            logger.debug(f"Skipping empty row {row_number}")
+                            continue
+                        
                         self.process_sheet_row(row_data, row_number)
                         processed_count += 1
                         logger.info(f"Processed sheet row {row_number}")
@@ -1655,8 +1671,8 @@ class SheetsImportService:
                 'success': True,
                 'processed_rows': processed_count,
                 'failed_rows': failed_count,
-                'total_new_rows': total_rows - last_row_processed,
-                'message': f'Processed {processed_count} rows, {failed_count} failed'
+                'total_new_rows': total_rows - max(1, last_row_processed),  # Subtract header
+                'message': f'Processed {processed_count} rows, {failed_count} failed (header row skipped)'
             }
             
         except Exception as e:

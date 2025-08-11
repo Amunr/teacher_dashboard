@@ -575,3 +575,173 @@ def internal_error(error) -> str:
     """Handle 500 errors."""
     logger.error(f"Internal server error: {error}")
     return render_template('error.html', message="Internal server error"), 500
+
+
+@dashboard_bp.route('/api/sheets/service/start', methods=['POST'])
+def start_sheets_service():
+    """Start the sheets polling service"""
+    try:
+        import subprocess
+        import os
+        import platform
+        
+        # Get the path to the sheets_poller.py script
+        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'sheets_poller.py')
+        
+        # Platform-specific subprocess launching
+        if platform.system() == "Windows":
+            # Use subprocess.Popen for Windows
+            process = subprocess.Popen(
+                ['python', script_path],
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+                cwd=os.path.dirname(script_path)
+            )
+        else:
+            # Use subprocess.Popen for Unix-like systems
+            process = subprocess.Popen(
+                ['python', script_path],
+                cwd=os.path.dirname(script_path)
+            )
+        
+        logger.info(f"Started sheets service with PID: {process.pid}")
+        return jsonify({
+            'success': True,
+            'message': f'Sheets service started with PID: {process.pid}',
+            'pid': process.pid
+        })
+        
+    except Exception as e:
+        logger.error(f"Failed to start sheets service: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@dashboard_bp.route('/api/sheets/service/stop', methods=['POST'])
+def stop_sheets_service():
+    """Stop the sheets polling service"""
+    try:
+        import psutil
+        import os
+        
+        # Find sheets_poller.py processes
+        stopped_count = 0
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.info['cmdline'] and 'sheets_poller.py' in ' '.join(proc.info['cmdline']):
+                    proc.terminate()
+                    stopped_count += 1
+                    logger.info(f"Terminated sheets service process {proc.info['pid']}")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        if stopped_count > 0:
+            return jsonify({
+                'success': True,
+                'message': f'Stopped {stopped_count} sheets service process(es)'
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'message': 'No sheets service processes found running'
+            })
+            
+    except ImportError:
+        # Fallback if psutil not available
+        return jsonify({
+            'success': False,
+            'error': 'psutil package required for service management'
+        }), 500
+    except Exception as e:
+        logger.error(f"Failed to stop sheets service: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@dashboard_bp.route('/api/sheets/service/status', methods=['GET'])
+def get_sheets_service_status():
+    """Get the status of the sheets polling service"""
+    try:
+        import psutil
+        
+        # Find sheets_poller.py processes
+        running_processes = []
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time']):
+            try:
+                if proc.info['cmdline'] and 'sheets_poller.py' in ' '.join(proc.info['cmdline']):
+                    running_processes.append({
+                        'pid': proc.info['pid'],
+                        'started': proc.info['create_time']
+                    })
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        return jsonify({
+            'success': True,
+            'running': len(running_processes) > 0,
+            'processes': running_processes,
+            'count': len(running_processes)
+        })
+        
+    except ImportError:
+        # Fallback if psutil not available
+        return jsonify({
+            'success': False,
+            'error': 'psutil package required for service status'
+        }), 500
+    except Exception as e:
+        logger.error(f"Failed to get sheets service status: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@dashboard_bp.route('/api/sheets/set-last-row', methods=['POST'])
+def set_last_row():
+    """Manually set the last processed row for testing"""
+    try:
+        data = request.get_json()
+        if not data or 'row_number' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'row_number is required'
+            }), 400
+        
+        row_number = int(data['row_number'])
+        if row_number < 0:
+            return jsonify({
+                'success': False,
+                'error': 'row_number must be non-negative'
+            }), 400
+        
+        # Update the configuration
+        config_service = SheetsManagementService(current_app.db_manager)
+        result = config_service.update_last_processed_row(row_number)
+        
+        if result['success']:
+            logger.info(f"Manually set last processed row to {row_number}")
+            return jsonify({
+                'success': True,
+                'message': f'Last processed row set to {row_number}'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', 'Failed to update last processed row')
+            }), 500
+            
+    except ValueError:
+        return jsonify({
+            'success': False,
+            'error': 'row_number must be a valid integer'
+        }), 400
+    except Exception as e:
+        logger.error(f"Failed to set last processed row: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

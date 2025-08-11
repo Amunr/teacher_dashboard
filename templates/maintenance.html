@@ -319,9 +319,22 @@
                             <small class="text-muted">Failed Imports:</small>
                             <small id="failedImports" class="text-danger">0</small>
                         </div>
-                        <div class="d-flex justify-content-between">
+                        <div class="d-flex justify-content-between mb-3">
                             <small class="text-muted">Next Poll:</small>
                             <small id="nextPoll">-</small>
+                        </div>
+                        
+                        <!-- Manual Last Row Setting -->
+                        <div class="border-top pt-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <small class="text-muted me-2">Set Last Row:</small>
+                                <input type="number" class="form-control form-control-sm" id="manualLastRow" 
+                                       min="0" max="10000" style="width: 80px;" placeholder="0">
+                                <button type="button" class="btn btn-outline-primary btn-sm ms-2" id="setLastRowBtn">
+                                    Set
+                                </button>
+                            </div>
+                            <small class="text-muted">For testing: manually set which row to process next</small>
                         </div>
                     </div>
                     <button class="btn btn-outline-info btn-sm w-100 mt-3" id="refreshStats">
@@ -632,7 +645,10 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 showAlert('Configuration saved successfully!', 'success');
-                loadSheetsConfig();
+                // Force reload configuration to update UI immediately
+                setTimeout(() => {
+                    loadSheetsConfig();
+                }, 500);
             } else {
                 showAlert('Error: ' + data.error, 'danger');
             }
@@ -867,6 +883,41 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('resetForm').addEventListener('click', function() {
         if (confirm('Reset form to saved values?')) {
             loadSheetsConfig();
+        }
+    });
+
+    // Set Last Row functionality
+    document.getElementById('setLastRowBtn').addEventListener('click', function() {
+        const lastRowInput = document.getElementById('manualLastRow');
+        const lastRow = parseInt(lastRowInput.value);
+        
+        if (isNaN(lastRow) || lastRow < 0) {
+            showAlert('Please enter a valid row number (0 or greater)', 'warning');
+            return;
+        }
+        
+        if (confirm(`Set last processed row to ${lastRow}? This will affect which rows are imported next.`)) {
+            fetch('/api/sheets/set-last-row', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ last_row: lastRow })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(`Last row set to ${lastRow}`, 'success');
+                    loadSheetsConfig(); // Refresh to show updated value
+                    lastRowInput.value = ''; // Clear input
+                } else {
+                    showAlert('Error: ' + data.error, 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Failed to set last row', 'danger');
+            });
         }
     });
 

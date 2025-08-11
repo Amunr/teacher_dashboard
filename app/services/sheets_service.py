@@ -354,3 +354,38 @@ class SheetsManagementService:
                 'success': False,
                 'error': f'Delete operation failed: {str(e)}'
             }
+    
+    def update_last_processed_row(self, row_number: int) -> Dict[str, Any]:
+        """
+        Manually update the last processed row number for testing purposes.
+        
+        Args:
+            row_number: Row number to set as last processed
+            
+        Returns:
+            Update result
+        """
+        try:
+            config = self.config_model.get_config()
+            if not config:
+                return {
+                    'success': False,
+                    'error': 'No Google Sheets configuration found'
+                }
+            
+            # Update the last_row_processed in the configuration
+            self.config_model.update_last_row_processed(row_number)
+            
+            return {
+                'success': True,
+                'message': f'Last processed row updated to {row_number}',
+                'previous_row': config['last_row_processed'],
+                'new_row': row_number
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to update last processed row: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to update last processed row: {str(e)}'
+            }
