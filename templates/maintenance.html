@@ -26,6 +26,11 @@
                         Student Counts <span class="badge bg-success">{{ student_counts|length }}</span>
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="sheets-tab" data-bs-toggle="tab" href="#sheets">
+                        Google Sheets <span class="badge bg-info" id="sheetsStatusBadge">Not Configured</span>
+                    </a>
+                </li>
                 {% if orphaned_responses %}
                 <li class="nav-item">
                     <a class="nav-link text-warning" id="orphaned-tab" data-bs-toggle="tab" href="#orphaned">
@@ -234,6 +239,151 @@
     </div>
 </div>
 
+<!-- Google Sheets Tab Content -->
+<div class="tab-pane fade" id="sheets" role="tabpanel">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Google Sheets Configuration</h5>
+                    <div>
+                        <span id="connectionStatus" class="badge bg-secondary">Unknown</span>
+                        <button class="btn btn-outline-primary btn-sm ms-2" id="testConnection">
+                            <i class="bi bi-wifi"></i> Test Connection
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form id="sheetsConfigForm">
+                        <div class="mb-3">
+                            <label for="sheetUrl" class="form-label">Google Sheets URL</label>
+                            <input type="url" class="form-control" id="sheetUrl" name="sheet_url" 
+                                   placeholder="https://docs.google.com/spreadsheets/d/your-sheet-id/edit">
+                            <div class="form-text">
+                                Paste the full Google Sheets URL. Make sure the sheet is publicly accessible or shared with view permissions.
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="pollInterval" class="form-label">Poll Interval (minutes)</label>
+                                <input type="number" class="form-control" id="pollInterval" name="poll_interval" 
+                                       min="1" max="1440" value="5">
+                                <div class="form-text">How often to check for new data (1-1440 minutes)</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Status</label>
+                                <div class="d-flex align-items-center">
+                                    <div class="form-check form-switch me-3">
+                                        <input class="form-check-input" type="checkbox" id="isActive" name="is_active">
+                                        <label class="form-check-label" for="isActive">Active</label>
+                                    </div>
+                                    <button type="button" class="btn btn-outline-danger btn-sm" id="deactivatePolling">
+                                        <i class="bi bi-stop-circle"></i> Stop Polling
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save"></i> Save Configuration
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary ms-2" id="resetForm">
+                                Reset
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Import Statistics</h6>
+                </div>
+                <div class="card-body">
+                    <div id="importStats">
+                        <div class="d-flex justify-content-between mb-2">
+                            <small class="text-muted">Last Import:</small>
+                            <small id="lastImport">Never</small>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <small class="text-muted">Last Row Processed:</small>
+                            <small id="lastRowProcessed">0</small>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <small class="text-muted">Total Imported:</small>
+                            <small id="totalImported">0</small>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <small class="text-muted">Failed Imports:</small>
+                            <small id="failedImports" class="text-danger">0</small>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted">Next Poll:</small>
+                            <small id="nextPoll">-</small>
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-info btn-sm w-100 mt-3" id="refreshStats">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-outline-success btn-sm w-100 mb-2" id="manualImport">
+                        <i class="bi bi-download"></i> Manual Import Now
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm w-100" id="viewFailedImports">
+                        <i class="bi bi-exclamation-triangle"></i> View Failed Imports
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Failed Imports Section -->
+    <div class="row mt-4" id="failedImportsSection" style="display: none;">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Failed Imports</h6>
+                    <div>
+                        <button class="btn btn-outline-success btn-sm" id="retryAllFailed">
+                            <i class="bi bi-arrow-clockwise"></i> Retry All
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm ms-2" id="deleteAllFailed">
+                            <i class="bi bi-trash"></i> Delete All
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Row</th>
+                                    <th>Error</th>
+                                    <th>Data</th>
+                                    <th>Failed At</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="failedImportsTable">
+                                <!-- Failed imports will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Student Count Modal -->
 <div class="modal fade" id="studentCountModal" tabindex="-1">
     <div class="modal-dialog">
@@ -430,6 +580,368 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    // Google Sheets functionality
+    loadSheetsConfig();
+    
+    // Load Google Sheets configuration
+    function loadSheetsConfig() {
+        fetch('/api/sheets/config')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.config) {
+                    document.getElementById('sheetUrl').value = data.config.sheet_url || '';
+                    document.getElementById('pollInterval').value = data.config.poll_interval || 5;
+                    document.getElementById('isActive').checked = data.config.is_active || false;
+                    document.getElementById('lastRowProcessed').textContent = data.config.last_row_processed || 0;
+                    
+                    updateConnectionStatus(data.config.is_active);
+                }
+                loadImportStats();
+            })
+            .catch(error => {
+                console.error('Error loading config:', error);
+            });
+    }
+
+    // Save Google Sheets configuration
+    document.getElementById('sheetsConfigForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const config = {
+            sheet_url: formData.get('sheet_url'),
+            poll_interval: parseInt(formData.get('poll_interval')),
+            is_active: formData.get('is_active') !== null
+        };
+
+        fetch('/api/sheets/config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(config)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Configuration saved successfully!', 'success');
+                loadSheetsConfig();
+            } else {
+                showAlert('Error: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('Failed to save configuration', 'danger');
+        });
+    });
+
+    // Test connection
+    document.getElementById('testConnection').addEventListener('click', function() {
+        const sheetUrl = document.getElementById('sheetUrl').value;
+        if (!sheetUrl) {
+            showAlert('Please enter a Google Sheets URL first', 'warning');
+            return;
+        }
+
+        this.disabled = true;
+        this.innerHTML = '<i class="bi bi-hourglass-split"></i> Testing...';
+
+        fetch('/api/sheets/test', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ sheet_url: sheetUrl })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateConnectionStatus(true);
+                showAlert(`Connection successful! Found ${data.row_count} rows.`, 'success');
+            } else {
+                updateConnectionStatus(false);
+                showAlert('Connection failed: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            updateConnectionStatus(false);
+            showAlert('Connection test failed', 'danger');
+        })
+        .finally(() => {
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-wifi"></i> Test Connection';
+        });
+    });
+
+    // Load import statistics
+    function loadImportStats() {
+        fetch('/api/sheets/stats')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const stats = data.stats;
+                    document.getElementById('lastImport').textContent = stats.last_import || 'Never';
+                    document.getElementById('totalImported').textContent = stats.total_imported || 0;
+                    document.getElementById('failedImports').textContent = stats.failed_imports || 0;
+                    document.getElementById('nextPoll').textContent = stats.next_poll || '-';
+                    
+                    // Update failed imports badge
+                    const failedCount = stats.failed_imports || 0;
+                    const sheetsTab = document.querySelector('a[href="#sheets"] .badge');
+                    if (sheetsTab) {
+                        if (failedCount > 0) {
+                            sheetsTab.textContent = failedCount;
+                            sheetsTab.className = 'badge bg-danger ms-1';
+                            sheetsTab.style.display = 'inline';
+                        } else {
+                            sheetsTab.style.display = 'none';
+                        }
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error loading stats:', error);
+            });
+    }
+
+    // Refresh stats
+    document.getElementById('refreshStats').addEventListener('click', function() {
+        loadImportStats();
+        showAlert('Statistics refreshed', 'info');
+    });
+
+    // Manual import
+    document.getElementById('manualImport').addEventListener('click', function() {
+        this.disabled = true;
+        this.innerHTML = '<i class="bi bi-hourglass-split"></i> Importing...';
+
+        fetch('/api/sheets/import', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(`Import completed! Processed ${data.processed_rows} new rows.`, 'success');
+                loadImportStats();
+            } else {
+                showAlert('Import failed: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('Manual import failed', 'danger');
+        })
+        .finally(() => {
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-download"></i> Manual Import Now';
+        });
+    });
+
+    // View failed imports
+    document.getElementById('viewFailedImports').addEventListener('click', function() {
+        const section = document.getElementById('failedImportsSection');
+        if (section.style.display === 'none') {
+            loadFailedImports();
+            section.style.display = 'block';
+            this.innerHTML = '<i class="bi bi-eye-slash"></i> Hide Failed Imports';
+        } else {
+            section.style.display = 'none';
+            this.innerHTML = '<i class="bi bi-exclamation-triangle"></i> View Failed Imports';
+        }
+    });
+
+    // Load failed imports
+    function loadFailedImports() {
+        fetch('/api/sheets/failed-imports')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.getElementById('failedImportsTable');
+                tbody.innerHTML = '';
+                
+                if (data.success && data.failed_imports.length > 0) {
+                    data.failed_imports.forEach(item => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${item.row_number}</td>
+                            <td><small class="text-danger">${item.error_message}</small></td>
+                            <td><small>${JSON.stringify(item.row_data).substring(0, 100)}...</small></td>
+                            <td><small>${new Date(item.failed_at).toLocaleString()}</small></td>
+                            <td>
+                                <button class="btn btn-outline-success btn-sm me-1" onclick="retryFailedImport(${item.id})">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm" onclick="deleteFailedImport(${item.id})">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No failed imports</td></tr>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading failed imports:', error);
+            });
+    }
+
+    // Retry all failed imports
+    document.getElementById('retryAllFailed').addEventListener('click', function() {
+        if (confirm('Retry all failed imports?')) {
+            fetch('/api/sheets/retry-failed', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(`Retried ${data.retried_count} failed imports.`, 'success');
+                    loadFailedImports();
+                    loadImportStats();
+                } else {
+                    showAlert('Retry failed: ' + data.error, 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Retry operation failed', 'danger');
+            });
+        }
+    });
+
+    // Delete all failed imports
+    document.getElementById('deleteAllFailed').addEventListener('click', function() {
+        if (confirm('Delete all failed import records? This cannot be undone.')) {
+            fetch('/api/sheets/failed-imports', {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('All failed imports deleted.', 'success');
+                    loadFailedImports();
+                    loadImportStats();
+                } else {
+                    showAlert('Delete failed: ' + data.error, 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Delete operation failed', 'danger');
+            });
+        }
+    });
+
+    // Deactivate polling
+    document.getElementById('deactivatePolling').addEventListener('click', function() {
+        if (confirm('Stop Google Sheets polling? This will deactivate automatic imports.')) {
+            fetch('/api/sheets/deactivate', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('Polling deactivated.', 'warning');
+                    loadSheetsConfig();
+                } else {
+                    showAlert('Deactivation failed: ' + data.error, 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Deactivation failed', 'danger');
+            });
+        }
+    });
+
+    // Reset form
+    document.getElementById('resetForm').addEventListener('click', function() {
+        if (confirm('Reset form to saved values?')) {
+            loadSheetsConfig();
+        }
+    });
+
+    // Helper functions
+    function updateConnectionStatus(isActive) {
+        const statusElement = document.getElementById('connectionStatus');
+        if (isActive) {
+            statusElement.textContent = 'Active';
+            statusElement.className = 'badge bg-success';
+        } else {
+            statusElement.textContent = 'Inactive';
+            statusElement.className = 'badge bg-secondary';
+        }
+    }
+
+    function showAlert(message, type) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        const container = document.querySelector('.container-fluid');
+        container.insertBefore(alertDiv, container.firstChild);
+        
+        setTimeout(() => {
+            alertDiv.remove();
+        }, 5000);
+    }
+
+    // Global functions for inline onclick handlers
+    window.retryFailedImport = function(id) {
+        fetch(`/api/sheets/retry-failed/${id}`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Import retried successfully.', 'success');
+                loadFailedImports();
+                loadImportStats();
+            } else {
+                showAlert('Retry failed: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('Retry failed', 'danger');
+        });
+    };
+
+    window.deleteFailedImport = function(id) {
+        if (confirm('Delete this failed import record?')) {
+            fetch(`/api/sheets/failed-imports/${id}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('Failed import deleted.', 'success');
+                    loadFailedImports();
+                    loadImportStats();
+                } else {
+                    showAlert('Delete failed: ' + data.error, 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Delete failed', 'danger');
+            });
+        }
+    };
+
+    // Refresh stats periodically when on sheets tab
+    setInterval(function() {
+        const sheetsTab = document.getElementById('sheets');
+        if (sheetsTab && sheetsTab.classList.contains('active')) {
+            loadImportStats();
+        }
+    }, 30000); // Refresh every 30 seconds when tab is active
 });
 </script>
 {% endblock %}

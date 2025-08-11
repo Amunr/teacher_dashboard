@@ -71,7 +71,7 @@ class DashboardService:
                 offset=0
             )
             
-            # Group responses by student (res_id)
+                # Group responses by student (res_id)
             student_data = {}
             domain_questions = {}
             
@@ -99,17 +99,18 @@ class DashboardService:
                         'questions': 0
                     }
                 
-                student_data[res_id]['domain_scores'][domain]['score'] += response['Response']
+                # Convert response to numeric value (handle both characters and numbers)
+                response_value = self._convert_response_to_numeric(response['Response'])
+                
+                student_data[res_id]['domain_scores'][domain]['score'] += response_value
                 student_data[res_id]['domain_scores'][domain]['questions'] += 1
-                student_data[res_id]['total_score'] += response['Response']
+                student_data[res_id]['total_score'] += response_value
                 student_data[res_id]['total_questions'] += 1
                 
                 # Track unique domains
                 if domain not in domain_questions:
                     domain_questions[domain] = set()
-                domain_questions[domain].add(response['Index_ID'])
-            
-            # Calculate percentage scores
+                domain_questions[domain].add(response['Index_ID'])            # Calculate percentage scores
             students = []
             for student in student_data.values():
                 # Calculate overall percentage
@@ -329,3 +330,44 @@ class DashboardService:
                 normalized[filter_name] = str(filters[filter_name]).strip()
         
         return normalized
+    
+    def _convert_response_to_numeric(self, response_value: Any) -> float:
+        """
+        Convert response value to numeric score.
+        Handles both character responses (A, B, C, D, E) and numeric responses.
+        
+        Args:
+            response_value: Response value (string or number)
+            
+        Returns:
+            Numeric score value
+        """
+        # If already a number, return it
+        if isinstance(response_value, (int, float)):
+            return float(response_value)
+        
+        # Convert string response
+        if isinstance(response_value, str):
+            response_str = str(response_value).strip().upper()
+            
+            # Character to number mapping (A=4, B=3, C=2, D=1, E=0)
+            char_mapping = {
+                'A': 4,
+                'B': 3,
+                'C': 2,
+                'D': 1,
+                'E': 0
+            }
+            
+            if response_str in char_mapping:
+                return float(char_mapping[response_str])
+            
+            # Try to parse as number
+            try:
+                return float(response_str)
+            except (ValueError, TypeError):
+                # Default to 0 for invalid responses
+                return 0.0
+        
+        # Default for any other type
+        return 0.0

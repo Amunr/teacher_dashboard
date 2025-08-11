@@ -101,6 +101,30 @@ class DatabaseManager:
             Column('total_students', Integer, nullable=False),
             Column('description', String(255))
         )
+        
+        # Google Sheets configuration table
+        self.sheets_config_table = Table(
+            'sheets_config', self.meta,
+            Column('id', Integer, primary_key=True),
+            Column('sheet_url', Text, nullable=False),
+            Column('last_row_processed', Integer, nullable=False, default=0),
+            Column('poll_interval', Integer, nullable=False, default=30),  # minutes
+            Column('is_active', Integer, nullable=False, default=1),  # boolean
+            Column('created_at', Date, nullable=False),
+            Column('updated_at', Date, nullable=False)
+        )
+        
+        # Failed sheet imports table
+        self.failed_imports_table = Table(
+            'failed_imports', self.meta,
+            Column('id', Integer, primary_key=True),
+            Column('sheet_row_number', Integer, nullable=False),
+            Column('raw_row_data', Text, nullable=False),  # JSON string of the raw row
+            Column('error_message', Text, nullable=False),
+            Column('failed_at', Date, nullable=False),
+            Column('retry_count', Integer, nullable=False, default=0),
+            Column('is_resolved', Integer, nullable=False, default=0)  # boolean
+        )
     
     @contextmanager
     def get_connection(self):
@@ -681,7 +705,10 @@ class ResponseModel:
                     if res_id not in res_scores:
                         res_scores[res_id] = 0
                         res_question_counts[res_id] = 0
-                    res_scores[res_id] += response['Response']
+                    
+                    # Convert response to numeric value (handle both characters and numbers)
+                    response_value = self._convert_response_to_numeric(response['Response'])
+                    res_scores[res_id] += response_value
                     res_question_counts[res_id] += 1
                 
                 # Calculate percentage scores (scale 1-4, so percentage out of 4)
@@ -710,7 +737,9 @@ class ResponseModel:
                             domain = response['Domain']
                             if domain not in student_domain_scores:
                                 student_domain_scores[domain] = []
-                            student_domain_scores[domain].append(response['Response'])
+                            # Convert response to numeric value
+                            response_value = self._convert_response_to_numeric(response['Response'])
+                            student_domain_scores[domain].append(response_value)
                     
                     # Check if student scores >80% in ALL domains
                     is_school_ready = True
@@ -738,7 +767,9 @@ class ResponseModel:
                     domain = response['Domain']
                     if domain not in domain_data:
                         domain_data[domain] = []
-                    domain_data[domain].append(response['Response'])
+                    # Convert response to numeric value
+                    response_value = self._convert_response_to_numeric(response['Response'])
+                    domain_data[domain].append(response_value)
                 
                 domain_scores = []
                 for domain, scores in domain_data.items():
@@ -761,7 +792,9 @@ class ResponseModel:
                             subdomain = response['SubDomain']
                             if subdomain not in subdomain_data:
                                 subdomain_data[subdomain] = []
-                            subdomain_data[subdomain].append(response['Response'])
+                            # Convert response to numeric value
+                            response_value = self._convert_response_to_numeric(response['Response'])
+                            subdomain_data[subdomain].append(response_value)
                     
                     for subdomain, scores in subdomain_data.items():
                         avg_score = sum(scores) / len(scores) if scores else 0
@@ -898,6 +931,47 @@ class ResponseModel:
         except Exception as e:
             logger.warning(f"Failed to get total student count: {e}")
             return 0
+    
+    def _convert_response_to_numeric(self, response_value: Any) -> float:
+        """
+        Convert response value to numeric score.
+        Handles both character responses (A, B, C, D, E) and numeric responses.
+        
+        Args:
+            response_value: Response value (string or number)
+            
+        Returns:
+            Numeric score value
+        """
+        # If already a number, return it
+        if isinstance(response_value, (int, float)):
+            return float(response_value)
+        
+        # Convert string response
+        if isinstance(response_value, str):
+            response_str = str(response_value).strip().upper()
+            
+            # Character to number mapping (A=4, B=3, C=2, D=1, E=0)
+            char_mapping = {
+                'A': 4,
+                'B': 3,
+                'C': 2,
+                'D': 1,
+                'E': 0
+            }
+            
+            if response_str in char_mapping:
+                return float(char_mapping[response_str])
+            
+            # Try to parse as number
+            try:
+                return float(response_str)
+            except (ValueError, TypeError):
+                # Default to 0 for invalid responses
+                return 0.0
+        
+        # Default for any other type
+        return 0.0
 
 
 class StudentCountModel:
@@ -1009,3 +1083,483 @@ class StudentCountModel:
         except Exception as e:
             logger.error(f"Failed to delete student count {count_id}: {e}")
             raise
+
+
+class SheetsConfigModel:
+    """Model for Google Sheets configuration operations."""
+    
+    def __init__(self, db_manager: DatabaseManager):
+        self.db = db_manager
+    
+    def get_config(self) -> Optional[Dict[str, Any]]:
+        """
+        Get the current Google Sheets configuration.
+        
+        Returns:
+            Configuration dictionary or None if not found
+        """
+        try:
+            with self.db.get_connection() as conn:
+                query = select(self.db.sheets_config_table).where(
+                    self.db.sheets_config_table.c.is_active == 1
+                ).order_by(self.db.sheets_config_table.c.updated_at.desc()).limit(1)
+                
+                result = conn.execute(query).fetchone()
+                return dict(result._mapping) if result else None
+                
+        except Exception as e:
+            logger.error(f"Failed to get sheets config: {e}")
+            raise
+    
+    def create_or_update_config(self, sheet_url: str, poll_interval: int = 30) -> int:
+        """
+        Create or update Google Sheets configuration.
+        
+        Args:
+            sheet_url: Google Sheets URL
+            poll_interval: Polling interval in minutes
+            
+        Returns:
+            Configuration ID
+        """
+        try:
+            with self.db.get_connection() as conn:
+                today = date.today()
+                
+                # Check if config exists
+                existing = self.get_config()
+                
+                if existing:
+                    # Update existing config
+                    update_query = update(self.db.sheets_config_table).where(
+                        self.db.sheets_config_table.c.id == existing['id']
+                    ).values(
+                        sheet_url=sheet_url,
+                        poll_interval=poll_interval,
+                        updated_at=today
+                    )
+                    conn.execute(update_query)
+                    conn.commit()
+                    logger.info(f"Updated sheets config {existing['id']}")
+                    return existing['id']
+                else:
+                    # Create new config
+                    insert_query = insert(self.db.sheets_config_table).values(
+                        sheet_url=sheet_url,
+                        last_row_processed=0,
+                        poll_interval=poll_interval,
+                        is_active=1,
+                        created_at=today,
+                        updated_at=today
+                    )
+                    result = conn.execute(insert_query)
+                    conn.commit()
+                    config_id = result.inserted_primary_key[0]
+                    logger.info(f"Created new sheets config {config_id}")
+                    return config_id
+                    
+        except Exception as e:
+            logger.error(f"Failed to create/update sheets config: {e}")
+            raise
+    
+    def update_last_row_processed(self, last_row: int) -> None:
+        """
+        Update the last processed row number.
+        
+        Args:
+            last_row: Last row number that was successfully processed
+        """
+        try:
+            with self.db.get_connection() as conn:
+                config = self.get_config()
+                if not config:
+                    raise ValueError("No active sheets configuration found")
+                
+                update_query = update(self.db.sheets_config_table).where(
+                    self.db.sheets_config_table.c.id == config['id']
+                ).values(
+                    last_row_processed=last_row,
+                    updated_at=date.today()
+                )
+                conn.execute(update_query)
+                conn.commit()
+                logger.info(f"Updated last row processed to {last_row}")
+                
+        except Exception as e:
+            logger.error(f"Failed to update last row processed: {e}")
+            raise
+    
+    def deactivate_config(self) -> None:
+        """Deactivate the current configuration."""
+        try:
+            with self.db.get_connection() as conn:
+                config = self.get_config()
+                if config:
+                    update_query = update(self.db.sheets_config_table).where(
+                        self.db.sheets_config_table.c.id == config['id']
+                    ).values(
+                        is_active=0,
+                        updated_at=date.today()
+                    )
+                    conn.execute(update_query)
+                    conn.commit()
+                    logger.info(f"Deactivated sheets config {config['id']}")
+                    
+        except Exception as e:
+            logger.error(f"Failed to deactivate sheets config: {e}")
+            raise
+
+
+class FailedImportsModel:
+    """Model for managing failed Google Sheets imports."""
+    
+    def __init__(self, db_manager: DatabaseManager):
+        self.db = db_manager
+    
+    def create_failed_import(self, sheet_row_number: int, raw_row_data: List[str], error_message: str) -> int:
+        """
+        Record a failed import attempt.
+        
+        Args:
+            sheet_row_number: Row number in the Google Sheet
+            raw_row_data: List of raw cell values from the sheet
+            error_message: Error description
+            
+        Returns:
+            Created record ID
+        """
+        try:
+            with self.db.get_connection() as conn:
+                insert_query = insert(self.db.failed_imports_table).values(
+                    sheet_row_number=sheet_row_number,
+                    raw_row_data=json.dumps(raw_row_data),
+                    error_message=error_message,
+                    failed_at=date.today(),
+                    retry_count=0,
+                    is_resolved=0
+                )
+                
+                result = conn.execute(insert_query)
+                conn.commit()
+                
+                failed_id = result.inserted_primary_key[0]
+                logger.warning(f"Created failed import record {failed_id} for sheet row {sheet_row_number}: {error_message}")
+                return failed_id
+                
+        except Exception as e:
+            logger.error(f"Failed to create failed import record: {e}")
+            raise
+    
+    def get_failed_imports(self, include_resolved: bool = False) -> List[Dict[str, Any]]:
+        """
+        Get all failed import records.
+        
+        Args:
+            include_resolved: Whether to include resolved failures
+            
+        Returns:
+            List of failed import dictionaries
+        """
+        try:
+            with self.db.get_connection() as conn:
+                query = select(self.db.failed_imports_table)
+                
+                if not include_resolved:
+                    query = query.where(self.db.failed_imports_table.c.is_resolved == 0)
+                
+                query = query.order_by(self.db.failed_imports_table.c.failed_at.desc())
+                
+                result = conn.execute(query).fetchall()
+                failed_imports = []
+                
+                for row in result:
+                    row_dict = dict(row._mapping)
+                    # Parse the JSON raw data
+                    row_dict['raw_row_data'] = json.loads(row_dict['raw_row_data'])
+                    failed_imports.append(row_dict)
+                
+                return failed_imports
+                
+        except Exception as e:
+            logger.error(f"Failed to get failed imports: {e}")
+            raise
+    
+    def retry_failed_import(self, failed_import_id: int) -> bool:
+        """
+        Attempt to retry a failed import by re-fetching the row from Google Sheets.
+        
+        Args:
+            failed_import_id: ID of the failed import to retry
+            
+        Returns:
+            True if retry was successful, False otherwise
+        """
+        try:
+            with self.db.get_connection() as conn:
+                # Get the failed import record
+                query = select(self.db.failed_imports_table).where(
+                    self.db.failed_imports_table.c.id == failed_import_id
+                )
+                result = conn.execute(query).fetchone()
+                
+                if not result:
+                    raise ValueError(f"Failed import {failed_import_id} not found")
+                
+                failed_import = dict(result._mapping)
+                sheet_row_number = failed_import['sheet_row_number']
+                
+                # Increment retry count
+                update_query = update(self.db.failed_imports_table).where(
+                    self.db.failed_imports_table.c.id == failed_import_id
+                ).values(
+                    retry_count=failed_import['retry_count'] + 1
+                )
+                conn.execute(update_query)
+                conn.commit()
+                
+                logger.info(f"Incremented retry count for failed import {failed_import_id}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to retry import {failed_import_id}: {e}")
+            return False
+    
+    def mark_resolved(self, failed_import_id: int) -> None:
+        """
+        Mark a failed import as resolved.
+        
+        Args:
+            failed_import_id: ID of the failed import to mark as resolved
+        """
+        try:
+            with self.db.get_connection() as conn:
+                update_query = update(self.db.failed_imports_table).where(
+                    self.db.failed_imports_table.c.id == failed_import_id
+                ).values(
+                    is_resolved=1
+                )
+                conn.execute(update_query)
+                conn.commit()
+                
+                logger.info(f"Marked failed import {failed_import_id} as resolved")
+                
+        except Exception as e:
+            logger.error(f"Failed to mark import {failed_import_id} as resolved: {e}")
+            raise
+    
+    def delete_failed_import(self, failed_import_id: int) -> None:
+        """
+        Delete a failed import record.
+        
+        Args:
+            failed_import_id: ID of the failed import to delete
+        """
+        try:
+            with self.db.get_connection() as conn:
+                delete_query = delete(self.db.failed_imports_table).where(
+                    self.db.failed_imports_table.c.id == failed_import_id
+                )
+                conn.execute(delete_query)
+                conn.commit()
+                
+                logger.info(f"Deleted failed import {failed_import_id}")
+                
+        except Exception as e:
+            logger.error(f"Failed to delete failed import {failed_import_id}: {e}")
+            raise
+
+
+class SheetsImportService:
+    """Service for importing data from Google Sheets."""
+    
+    # Kannada to numeric conversion mapping
+    KANNADA_MAPPINGS = {
+        'ಸಾಧಿಸಿದ್ದಾರೆ': 1,
+        'ಪ್ರಗತಿಯಲ್ಲಿದ್ದಾರೆ': 0.5,
+        'ಕಲಿಯುತ್ತಿದ್ದಾರೆ': 0,
+        # English equivalents
+        'achieved': 1,
+        'in progress': 0.5,
+        'learning': 0,
+        'accomplished': 1,
+        'progressing': 0.5,
+        'developing': 0
+    }
+    
+    def __init__(self, db_manager: DatabaseManager):
+        self.db = db_manager
+        self.response_model = ResponseModel(db_manager)
+        self.failed_imports_model = FailedImportsModel(db_manager)
+    
+    @staticmethod
+    def convert_sheets_url_to_csv(sheets_url: str) -> str:
+        """
+        Convert a Google Sheets URL to CSV export format.
+        
+        Args:
+            sheets_url: Regular Google Sheets URL
+            
+        Returns:
+            CSV export URL
+        """
+        try:
+            import re
+            
+            # Extract sheet ID from various Google Sheets URL formats
+            patterns = [
+                r'/spreadsheets/d/([a-zA-Z0-9-_]+)',
+                r'key=([a-zA-Z0-9-_]+)',
+                r'id=([a-zA-Z0-9-_]+)'
+            ]
+            
+            sheet_id = None
+            for pattern in patterns:
+                match = re.search(pattern, sheets_url)
+                if match:
+                    sheet_id = match.group(1)
+                    break
+            
+            if not sheet_id:
+                raise ValueError("Could not extract sheet ID from URL")
+            
+            csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
+            logger.info(f"Converted sheets URL to CSV: {csv_url}")
+            return csv_url
+            
+        except Exception as e:
+            logger.error(f"Failed to convert sheets URL: {e}")
+            raise
+    
+    def convert_response_value(self, value: str) -> float:
+        """
+        Convert Kannada/English response values to numeric.
+        
+        Args:
+            value: Response value from the sheet
+            
+        Returns:
+            Numeric value
+        """
+        if not value or not isinstance(value, str):
+            raise ValueError(f"Invalid response value: {value}")
+        
+        # Clean and normalize the value
+        clean_value = value.strip().lower()
+        
+        # Try direct numeric conversion first
+        try:
+            return float(clean_value)
+        except ValueError:
+            pass
+        
+        # Try Kannada/English mapping
+        if clean_value in self.KANNADA_MAPPINGS:
+            return self.KANNADA_MAPPINGS[clean_value]
+        
+        # Check for partial matches
+        for key, numeric_value in self.KANNADA_MAPPINGS.items():
+            if clean_value in key.lower() or key.lower() in clean_value:
+                return numeric_value
+        
+        raise ValueError(f"Could not convert response value: {value}")
+    
+    def validate_metadata(self, metadata: Dict[str, str]) -> Dict[str, str]:
+        """
+        Validate and clean metadata fields.
+        
+        Args:
+            metadata: Dictionary of metadata fields
+            
+        Returns:
+            Cleaned metadata dictionary
+        """
+        required_fields = ['School', 'Grade', 'Teacher', 'Assessment', 'Name', 'Date']
+        cleaned = {}
+        
+        for field in required_fields:
+            value = metadata.get(field, '').strip()
+            if not value:
+                raise ValueError(f"Required field '{field}' is missing or empty")
+            cleaned[field] = value
+        
+        # Validate date format
+        try:
+            if cleaned['Date']:
+                # Try to parse the date to ensure it's valid
+                datetime.strptime(cleaned['Date'], "%Y-%m-%d")
+        except ValueError:
+            raise ValueError(f"Invalid date format: {cleaned['Date']}. Expected YYYY-MM-DD")
+        
+        return cleaned
+    
+    def process_sheet_row(self, row_data: List[str], sheet_row_number: int) -> int:
+        """
+        Process a single row from Google Sheets and insert into database.
+        
+        Args:
+            row_data: List of cell values from the sheet row
+            sheet_row_number: Row number in the sheet
+            
+        Returns:
+            Created res_id
+        """
+        try:
+            if not row_data or len(row_data) == 0:
+                raise ValueError("Empty row data")
+            
+            # Convert row data to response format (index + 1 = column position)
+            response_data = {}
+            
+            # Process each column
+            for col_index, cell_value in enumerate(row_data):
+                index_id = col_index + 1  # Column A = 1, B = 2, etc.
+                
+                if cell_value and str(cell_value).strip():
+                    try:
+                        # Try to convert response values
+                        numeric_value = self.convert_response_value(str(cell_value))
+                        response_data[index_id] = numeric_value
+                    except ValueError:
+                        # If conversion fails, store as string (for metadata)
+                        response_data[index_id] = str(cell_value).strip()
+            
+            # Create response using existing ResponseModel logic
+            res_id = self.response_model.create_response(response_data)
+            logger.info(f"Successfully processed sheet row {sheet_row_number}, created res_id {res_id}")
+            return res_id
+            
+        except Exception as e:
+            error_msg = f"Failed to process sheet row {sheet_row_number}: {str(e)}"
+            logger.error(error_msg)
+            
+            # Record the failed import
+            self.failed_imports_model.create_failed_import(
+                sheet_row_number=sheet_row_number,
+                raw_row_data=row_data,
+                error_message=str(e)
+            )
+            raise
+    
+    def process_row_data(self, row_data: List[str], row_number: int) -> Dict[str, Any]:
+        """
+        Process a single row of data from Google Sheets.
+        
+        Args:
+            row_data: List of cell values from the sheet row
+            row_number: The row number in the sheet
+            
+        Returns:
+            Dict with success status and any error information
+        """
+        try:
+            self._process_sheet_row(row_data, row_number)
+            return {
+                'success': True,
+                'message': f'Successfully processed row {row_number}'
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'row_number': row_number
+            }

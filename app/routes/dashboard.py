@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 import os
 
 from ..services import LayoutService, DashboardService
+from ..services.sheets_service import SheetsManagementService
 from ..utils import log_operation
 
 logger = logging.getLogger(__name__)
@@ -329,6 +330,238 @@ def health_check() -> Dict[str, Any]:
             'status': 'unhealthy',
             'error': str(e)
         }, 503
+
+
+# Google Sheets Integration API Routes
+
+@dashboard_bp.route('/api/sheets/config', methods=['GET'])
+def get_sheets_config():
+    """Get current Google Sheets configuration."""
+    try:
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        config = sheets_service.get_config()
+        
+        if config:
+            # Don't expose sensitive data, just the essentials
+            safe_config = {
+                'sheet_url': config['sheet_url'],
+                'poll_interval': config['poll_interval'],
+                'last_row_processed': config['last_row_processed'],
+                'is_active': config['is_active'],
+                'updated_at': str(config['updated_at'])
+            }
+            return jsonify(safe_config)
+        else:
+            return jsonify({'configured': False})
+            
+    except Exception as e:
+        logger.error(f"Failed to get sheets config: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/api/sheets/config', methods=['POST'])
+def update_sheets_config():
+    """Update Google Sheets configuration."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        sheet_url = data.get('sheet_url', '').strip()
+        poll_interval = data.get('poll_interval', 30)
+        
+        if not sheet_url:
+            return jsonify({'error': 'Sheet URL is required'}), 400
+        
+        try:
+            poll_interval = int(poll_interval)
+            if poll_interval < 1:
+                return jsonify({'error': 'Poll interval must be at least 1 minute'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Poll interval must be a valid number'}), 400
+        
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        result = sheets_service.update_config(sheet_url, poll_interval)
+        
+        if result['success']:
+            log_operation('sheets_config_updated', {'sheet_url': sheet_url, 'poll_interval': poll_interval})
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        logger.error(f"Failed to update sheets config: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/api/sheets/test', methods=['POST'])
+def test_sheets_connection():
+    """Test connection to a Google Sheet."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        sheet_url = data.get('sheet_url', '').strip()
+        
+        if not sheet_url:
+            return jsonify({'error': 'Sheet URL is required'}), 400
+        
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        result = sheets_service.test_sheet_connection(sheet_url)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Failed to test sheet connection: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/api/sheets/stats', methods=['GET'])
+def get_sheets_stats():
+    """Get Google Sheets import statistics."""
+    try:
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        stats = sheets_service.get_import_stats()
+        return jsonify(stats)
+        
+    except Exception as e:
+        logger.error(f"Failed to get sheets stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/api/sheets/deactivate', methods=['POST'])
+def deactivate_sheets_config():
+    """Deactivate Google Sheets configuration."""
+    try:
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        result = sheets_service.deactivate_config()
+        
+        if result['success']:
+            log_operation('sheets_config_deactivated')
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Failed to deactivate sheets config: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/api/sheets/failed-imports', methods=['GET'])
+def get_failed_imports():
+    """Get list of failed imports."""
+    try:
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        failed_imports = sheets_service.get_failed_imports()
+        return jsonify({'failed_imports': failed_imports})
+        
+    except Exception as e:
+        logger.error(f"Failed to get failed imports: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/api/sheets/failed-imports/<int:failed_import_id>/retry', methods=['POST'])
+def retry_failed_import(failed_import_id: int):
+    """Retry a specific failed import."""
+    try:
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        result = sheets_service.retry_failed_import(failed_import_id)
+        
+        if result['success']:
+            log_operation('failed_import_retried', {'failed_import_id': failed_import_id, 'res_id': result.get('res_id')})
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Failed to retry import {failed_import_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/api/sheets/failed-imports/<int:failed_import_id>', methods=['DELETE'])
+def delete_failed_import(failed_import_id: int):
+    """Delete a failed import record."""
+    try:
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        result = sheets_service.delete_failed_import(failed_import_id)
+        
+        if result['success']:
+            log_operation('failed_import_deleted', {'failed_import_id': failed_import_id})
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Failed to delete failed import {failed_import_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/api/sheets/import', methods=['POST'])
+def manual_import():
+    """Trigger a manual import from Google Sheets"""
+    try:
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        result = sheets_service.manual_import()
+        
+        if result['success']:
+            log_operation('manual_import_triggered', {'processed_rows': result.get('processed_rows', 0)})
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error during manual import: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@dashboard_bp.route('/api/sheets/retry-failed', methods=['POST'])
+def retry_all_failed():
+    """Retry all failed imports"""
+    try:
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        result = sheets_service.retry_all_failed_imports()
+        
+        if result['success']:
+            log_operation('retry_all_failed', {'retried_count': result.get('retried_count', 0)})
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error retrying failed imports: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@dashboard_bp.route('/api/sheets/retry-failed/<int:failed_import_id>', methods=['POST'])
+def retry_single_failed(failed_import_id):
+    """Retry a specific failed import"""
+    try:
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        result = sheets_service.retry_failed_import(failed_import_id)
+        
+        if result['success']:
+            log_operation('retry_failed_import', {'failed_import_id': failed_import_id})
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error retrying failed import {failed_import_id}: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@dashboard_bp.route('/api/sheets/failed-imports', methods=['DELETE'])
+def delete_all_failed_imports():
+    """Delete all failed import records"""
+    try:
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        result = sheets_service.delete_all_failed_imports()
+        
+        if result['success']:
+            log_operation('delete_all_failed_imports', {'deleted_count': result.get('deleted_count', 0)})
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error deleting all failed imports: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @dashboard_bp.errorhandler(404)
