@@ -595,12 +595,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('isActive').checked = data.config.is_active || false;
                     document.getElementById('lastRowProcessed').textContent = data.config.last_row_processed || 0;
                     
-                    updateConnectionStatus(data.config.is_active);
+                    // A sheet is configured if there's a URL
+                    const isConfigured = data.config.sheet_url && data.config.sheet_url.trim() !== '';
+                    updateConnectionStatus(isConfigured && data.config.is_active);
+                } else {
+                    // No configuration found
+                    updateConnectionStatus(false);
                 }
                 loadImportStats();
             })
             .catch(error => {
                 console.error('Error loading config:', error);
+                updateConnectionStatus(false);
             });
     }
 
@@ -867,12 +873,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // Helper functions
     function updateConnectionStatus(isActive) {
         const statusElement = document.getElementById('connectionStatus');
+        const tabBadge = document.getElementById('sheetsStatusBadge');
+        
         if (isActive) {
             statusElement.textContent = 'Active';
             statusElement.className = 'badge bg-success';
+            tabBadge.textContent = 'Configured';
+            tabBadge.className = 'badge bg-success';
         } else {
             statusElement.textContent = 'Inactive';
             statusElement.className = 'badge bg-secondary';
+            tabBadge.textContent = 'Not Configured';
+            tabBadge.className = 'badge bg-info';
         }
     }
 

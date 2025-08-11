@@ -113,16 +113,18 @@ class DashboardService:
                 domain_questions[domain].add(response['Index_ID'])            # Calculate percentage scores
             students = []
             for student in student_data.values():
-                # Calculate overall percentage
+                # Calculate overall percentage (max score per question is 1)
                 if student['total_questions'] > 0:
-                    student['percentage'] = round((student['total_score'] / student['total_questions']) * 100, 1)
+                    max_possible_score = student['total_questions'] * 1
+                    student['percentage'] = round((student['total_score'] / max_possible_score) * 100, 1)
                 else:
                     student['percentage'] = 0
                 
-                # Calculate domain percentages
+                # Calculate domain percentages (max score per question is 1)
                 for domain_data in student['domain_scores'].values():
                     if domain_data['questions'] > 0:
-                        domain_data['percentage'] = round((domain_data['score'] / domain_data['questions']) * 100, 1)
+                        max_possible_score = domain_data['questions'] * 1
+                        domain_data['percentage'] = round((domain_data['score'] / max_possible_score) * 100, 1)
                     else:
                         domain_data['percentage'] = 0
                 
@@ -334,37 +336,22 @@ class DashboardService:
     def _convert_response_to_numeric(self, response_value: Any) -> float:
         """
         Convert response value to numeric score.
-        Handles both character responses (A, B, C, D, E) and numeric responses.
+        Response values should already be numeric (0, 0.5, 1) from the database.
         
         Args:
-            response_value: Response value (string or number)
+            response_value: Response value (should be numeric)
             
         Returns:
-            Numeric score value
+            Numeric score value (0, 0.5, or 1)
         """
         # If already a number, return it
         if isinstance(response_value, (int, float)):
             return float(response_value)
         
-        # Convert string response
+        # Try to parse as number
         if isinstance(response_value, str):
-            response_str = str(response_value).strip().upper()
-            
-            # Character to number mapping (A=4, B=3, C=2, D=1, E=0)
-            char_mapping = {
-                'A': 4,
-                'B': 3,
-                'C': 2,
-                'D': 1,
-                'E': 0
-            }
-            
-            if response_str in char_mapping:
-                return float(char_mapping[response_str])
-            
-            # Try to parse as number
             try:
-                return float(response_str)
+                return float(response_value)
             except (ValueError, TypeError):
                 # Default to 0 for invalid responses
                 return 0.0

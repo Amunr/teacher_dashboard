@@ -1,14 +1,63 @@
 <script>
-// Preserve scroll position across reloads
+// Improved scroll position management
+let wasAddingContent = false;
+let lastContentHeight = 0;
+
+// Track if we're adding new content
 window.addEventListener('beforeunload', function() {
-    sessionStorage.setItem('scrollPos', window.scrollY);
-});
-window.addEventListener('DOMContentLoaded', function() {
-    const scrollPos = sessionStorage.getItem('scrollPos');
-    if (scrollPos !== null) {
-        window.scrollTo(0, parseInt(scrollPos, 10));
+    const url = new URL(window.location.href);
+    const isAddingContent = url.pathname.includes('add_domain') || 
+                           url.pathname.includes('add_subdomain') || 
+                           url.pathname.includes('add_question');
+    
+    if (isAddingContent) {
+        sessionStorage.setItem('scrollToBottom', 'true');
         sessionStorage.removeItem('scrollPos');
+    } else {
+        sessionStorage.setItem('scrollPos', window.scrollY);
+        sessionStorage.removeItem('scrollToBottom');
     }
+    
+    // Store content height
+    sessionStorage.setItem('contentHeight', document.body.scrollHeight);
+});
+
+window.addEventListener('DOMContentLoaded', function() {
+    const shouldScrollToBottom = sessionStorage.getItem('scrollToBottom');
+    const scrollPos = sessionStorage.getItem('scrollPos');
+    const previousHeight = parseInt(sessionStorage.getItem('contentHeight'), 10) || 0;
+    const currentHeight = document.body.scrollHeight;
+    
+    if (shouldScrollToBottom === 'true' || currentHeight > previousHeight) {
+        // New content was added, scroll to bottom with smooth animation
+        setTimeout(() => {
+            window.scrollTo({
+                top: document.body.scrollHeight,
+                behavior: 'smooth'
+            });
+        }, 100);
+        sessionStorage.removeItem('scrollToBottom');
+    } else if (scrollPos !== null) {
+        // Restore previous scroll position
+        window.scrollTo(0, parseInt(scrollPos, 10));
+    }
+    
+    // Clean up
+    sessionStorage.removeItem('scrollPos');
+    sessionStorage.removeItem('contentHeight');
+});
+
+// Handle form submissions for add operations
+document.addEventListener('DOMContentLoaded', function() {
+    const forms = document.querySelectorAll('form');
+    forms.forEach(form => {
+        form.addEventListener('submit', function(e) {
+            const action = form.getAttribute('action') || '';
+            if (action.includes('add_domain') || action.includes('add_subdomain') || action.includes('add_question')) {
+                sessionStorage.setItem('scrollToBottom', 'true');
+            }
+        });
+    });
 });
 </script>
 {% extends "layout.html" %}

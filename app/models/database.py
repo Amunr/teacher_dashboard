@@ -168,12 +168,14 @@ class LayoutModel:
         """
         try:
             with self.db.get_connection() as conn:
+                today = date.today()
+                
                 query = select(
                     self.db.questions_table.c.layout_id,
                     self.db.questions_table.c.layout_name,
                     func.max(self.db.questions_table.c['Date edited']).label('date_edited'),
                     func.max(self.db.questions_table.c.year_end).label('year_end'),
-                    func.max(self.db.questions_table.c.year_start).label('year_start')
+                    func.min(self.db.questions_table.c.year_start).label('year_start')
                 ).group_by(
                     self.db.questions_table.c.layout_id, 
                     self.db.questions_table.c.layout_name
@@ -184,20 +186,43 @@ class LayoutModel:
                 if not result:
                     return []
                 
-                # Find the layout with the latest year_end as current
-                max_year_end = max(
-                    [r['year_end'] for r in result if r['year_end'] is not None], 
-                    default=None
-                )
-                
                 layouts = []
+                current_layout_id = None
+                
+                # Find the layout that is currently active (today's date falls within its range)
                 for row in result:
+                    year_start = row['year_start']
+                    year_end = row['year_end']
+                    is_current = False
+                    
+                    if year_start and year_end:
+                        is_current = year_start <= today <= year_end
+                        if is_current:
+                            current_layout_id = row['layout_id']
+                    
                     layouts.append({
                         'layout_id': row['layout_id'],
                         'layout_name': row['layout_name'],
                         'date_edited': str(row['date_edited']) if row['date_edited'] else '',
-                        'is_current': (row['year_end'] == max_year_end)
+                        'year_start': str(year_start) if year_start else '',
+                        'year_end': str(year_end) if year_end else '',
+                        'is_current': is_current
                     })
+                
+                # If no layout is current based on date range, mark the one with latest year_end as current
+                if current_layout_id is None and layouts:
+                    max_year_end = max(
+                        [l['year_end'] for l in layouts if l['year_end']], 
+                        default=None
+                    )
+                    for layout in layouts:
+                        if layout['year_end'] == max_year_end:
+                            layout['is_current'] = True
+                            current_layout_id = layout['layout_id']
+                            break
+                
+                # Sort layouts: current layout first, then by year_end descending
+                layouts.sort(key=lambda x: (not x['is_current'], x['year_end'] or ''), reverse=True)
                 
                 return layouts
                 
@@ -711,12 +736,12 @@ class ResponseModel:
                     res_scores[res_id] += response_value
                     res_question_counts[res_id] += 1
                 
-                # Calculate percentage scores (scale 1-4, so percentage out of 4)
+                # Calculate percentage scores (scale 0-1, so percentage is just * 100)
                 student_scores = []
                 for res_id in res_scores:
                     if res_question_counts[res_id] > 0:
                         avg_score = res_scores[res_id] / res_question_counts[res_id]
-                        percent_score = (avg_score / 4) * 100  # Convert 1-4 scale to percentage
+                        percent_score = avg_score * 100  # Convert 0-1 scale to percentage
                         student_scores.append(percent_score)
                 
                 average_score = sum(student_scores) / len(student_scores) if student_scores else 0
@@ -746,7 +771,7 @@ class ResponseModel:
                     for domain in all_domains:
                         if domain in student_domain_scores:
                             domain_avg = sum(student_domain_scores[domain]) / len(student_domain_scores[domain])
-                            domain_percent = (domain_avg / 4) * 100
+                            domain_percent = domain_avg * 100  # Convert 0-1 scale to percentage
                             if domain_percent <= 80:
                                 is_school_ready = False
                                 break
@@ -774,7 +799,7 @@ class ResponseModel:
                 domain_scores = []
                 for domain, scores in domain_data.items():
                     avg_score = sum(scores) / len(scores) if scores else 0
-                    percent_score = (avg_score / 4) * 100  # Convert 1-4 scale to percentage
+                    percent_score = avg_score * 100  # Convert 0-1 scale to percentage
                     domain_scores.append({'domain': domain, 'score': round(percent_score, 1)})
                 
                 domain_scores.sort(key=lambda x: x['score'], reverse=True)
@@ -798,7 +823,7 @@ class ResponseModel:
                     
                     for subdomain, scores in subdomain_data.items():
                         avg_score = sum(scores) / len(scores) if scores else 0
-                        percent_score = (avg_score / 4) * 100  # Convert 1-4 scale to percentage
+                        percent_score = avg_score * 100  # Convert 0-1 scale to percentage
                         subdomain_scores.append({'subdomain': subdomain, 'score': round(percent_score, 1)})
                     
                     subdomain_scores.sort(key=lambda x: x['score'], reverse=True)
@@ -935,37 +960,22 @@ class ResponseModel:
     def _convert_response_to_numeric(self, response_value: Any) -> float:
         """
         Convert response value to numeric score.
-        Handles both character responses (A, B, C, D, E) and numeric responses.
+        Response values should already be numeric (0, 0.5, 1) from the database.
         
         Args:
-            response_value: Response value (string or number)
+            response_value: Response value (should be numeric)
             
         Returns:
-            Numeric score value
+            Numeric score value (0, 0.5, or 1)
         """
         # If already a number, return it
         if isinstance(response_value, (int, float)):
             return float(response_value)
         
-        # Convert string response
+        # Try to parse as number
         if isinstance(response_value, str):
-            response_str = str(response_value).strip().upper()
-            
-            # Character to number mapping (A=4, B=3, C=2, D=1, E=0)
-            char_mapping = {
-                'A': 4,
-                'B': 3,
-                'C': 2,
-                'D': 1,
-                'E': 0
-            }
-            
-            if response_str in char_mapping:
-                return float(char_mapping[response_str])
-            
-            # Try to parse as number
             try:
-                return float(response_str)
+                return float(response_value)
             except (ValueError, TypeError):
                 # Default to 0 for invalid responses
                 return 0.0
@@ -1440,27 +1450,39 @@ class SheetsImportService:
         Returns:
             Numeric value
         """
+        logger.debug(f"Converting response value: '{value}' (type: {type(value)})")
+        
         if not value or not isinstance(value, str):
+            logger.warning(f"Invalid response value: {value}")
             raise ValueError(f"Invalid response value: {value}")
         
         # Clean and normalize the value
         clean_value = value.strip().lower()
+        logger.debug(f"Cleaned value: '{clean_value}'")
         
         # Try direct numeric conversion first
         try:
-            return float(clean_value)
+            numeric_result = float(clean_value)
+            logger.debug(f"Direct numeric conversion successful: {clean_value} -> {numeric_result}")
+            return numeric_result
         except ValueError:
+            logger.debug(f"Direct numeric conversion failed for: '{clean_value}'")
             pass
         
         # Try Kannada/English mapping
         if clean_value in self.KANNADA_MAPPINGS:
-            return self.KANNADA_MAPPINGS[clean_value]
+            result = self.KANNADA_MAPPINGS[clean_value]
+            logger.debug(f"Found direct mapping: '{clean_value}' -> {result}")
+            return result
         
         # Check for partial matches
         for key, numeric_value in self.KANNADA_MAPPINGS.items():
             if clean_value in key.lower() or key.lower() in clean_value:
+                logger.debug(f"Found partial match: '{clean_value}' matches '{key}' -> {numeric_value}")
                 return numeric_value
         
+        logger.error(f"Could not convert response value: '{value}' (cleaned: '{clean_value}')")
+        logger.debug(f"Available mappings: {list(self.KANNADA_MAPPINGS.keys())}")
         raise ValueError(f"Could not convert response value: {value}")
     
     def validate_metadata(self, metadata: Dict[str, str]) -> Dict[str, str]:
@@ -1504,6 +1526,9 @@ class SheetsImportService:
             Created res_id
         """
         try:
+            logger.debug(f"Processing sheet row {sheet_row_number} with {len(row_data) if row_data else 0} columns")
+            logger.debug(f"Raw row data: {row_data}")
+            
             if not row_data or len(row_data) == 0:
                 raise ValueError("Empty row data")
             
@@ -1513,15 +1538,20 @@ class SheetsImportService:
             # Process each column
             for col_index, cell_value in enumerate(row_data):
                 index_id = col_index + 1  # Column A = 1, B = 2, etc.
+                logger.debug(f"Processing column {index_id} (col_index {col_index}): '{cell_value}'")
                 
                 if cell_value and str(cell_value).strip():
                     try:
                         # Try to convert response values
                         numeric_value = self.convert_response_value(str(cell_value))
                         response_data[index_id] = numeric_value
-                    except ValueError:
+                        logger.debug(f"Successfully converted column {index_id}: '{cell_value}' -> {numeric_value}")
+                    except ValueError as e:
                         # If conversion fails, store as string (for metadata)
                         response_data[index_id] = str(cell_value).strip()
+                        logger.debug(f"Conversion failed for column {index_id}, stored as string: '{cell_value}' (error: {e})")
+            
+            logger.debug(f"Final response_data for row {sheet_row_number}: {response_data}")
             
             # Create response using existing ResponseModel logic
             res_id = self.response_model.create_response(response_data)
@@ -1552,14 +1582,87 @@ class SheetsImportService:
             Dict with success status and any error information
         """
         try:
-            self._process_sheet_row(row_data, row_number)
+            res_id = self.process_sheet_row(row_data, row_number)
             return {
                 'success': True,
-                'message': f'Successfully processed row {row_number}'
+                'message': f'Successfully processed row {row_number}',
+                'res_id': res_id
             }
         except Exception as e:
             return {
                 'success': False,
                 'error': str(e),
                 'row_number': row_number
+            }
+    
+    def fetch_and_process_new_rows(self, sheet_url: str, last_row_processed: int) -> Dict[str, Any]:
+        """
+        Fetch new rows from Google Sheets and process them.
+        
+        Args:
+            sheet_url: Google Sheets URL
+            last_row_processed: Last row number that was processed
+            
+        Returns:
+            Dict with processing results
+        """
+        try:
+            import requests
+            import csv
+            from io import StringIO
+            
+            # Convert to CSV URL
+            csv_url = self.convert_sheets_url_to_csv(sheet_url)
+            
+            # Fetch the sheet data
+            response = requests.get(csv_url, timeout=30)
+            response.raise_for_status()
+            
+            # Parse CSV content
+            csv_content = response.text
+            csv_reader = csv.reader(StringIO(csv_content))
+            rows = list(csv_reader)
+            
+            total_rows = len(rows)
+            
+            if total_rows <= last_row_processed:
+                return {
+                    'success': True,
+                    'processed_rows': 0,
+                    'message': 'No new rows to process'
+                }
+            
+            processed_count = 0
+            failed_count = 0
+            
+            # Process new rows (skip header if last_row_processed is 0)
+            start_row = max(1 if last_row_processed == 0 else last_row_processed + 1, 1)
+            
+            for row_number in range(start_row, total_rows + 1):
+                try:
+                    if row_number <= len(rows):
+                        row_data = rows[row_number - 1]  # Convert to 0-based index
+                        self.process_sheet_row(row_data, row_number)
+                        processed_count += 1
+                        logger.info(f"Processed sheet row {row_number}")
+                except Exception as e:
+                    failed_count += 1
+                    logger.error(f"Failed to process sheet row {row_number}: {e}")
+                    # Error is already recorded in process_sheet_row
+                    continue
+            
+            return {
+                'success': True,
+                'processed_rows': processed_count,
+                'failed_rows': failed_count,
+                'total_new_rows': total_rows - last_row_processed,
+                'message': f'Processed {processed_count} rows, {failed_count} failed'
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch and process new rows: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'processed_rows': 0
             }
