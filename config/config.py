@@ -16,7 +16,7 @@ class Config:
     SECRET_KEY: str = os.environ.get('SECRET_KEY') or 'dev-key-change-in-production'
     
     # Database settings
-    DATABASE_URL: str = os.environ.get('DATABASE_URL') or 'sqlite:///data.db'
+    DATABASE_URL: str = os.environ.get('DATABASE_URL') or 'sqlite:///dev_data.db'
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_pre_ping': True,

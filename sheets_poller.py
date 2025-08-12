@@ -278,7 +278,7 @@ def main():
             # Try to load from config
             try:
                 config = Config()
-                database_url = config.SQLALCHEMY_DATABASE_URI
+                database_url = config.DATABASE_URL
             except Exception as e:
                 logger.error(f"Failed to load database URL from config: {e}")
                 database_url = "sqlite:///dev_data.db"  # Fallback

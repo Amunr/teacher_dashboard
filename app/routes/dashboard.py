@@ -588,20 +588,18 @@ def start_sheets_service():
         # Get the path to the sheets_poller.py script
         script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'sheets_poller.py')
         
-        # Platform-specific subprocess launching
-        if platform.system() == "Windows":
-            # Use subprocess.Popen for Windows
-            process = subprocess.Popen(
-                ['python', script_path],
-                creationflags=subprocess.CREATE_NEW_CONSOLE,
-                cwd=os.path.dirname(script_path)
-            )
-        else:
-            # Use subprocess.Popen for Unix-like systems
-            process = subprocess.Popen(
-                ['python', script_path],
-                cwd=os.path.dirname(script_path)
-            )
+        # Use virtual environment Python if available
+        venv_python = os.path.join(os.path.dirname(script_path), 'venv', 'Scripts', 'python.exe')
+        python_cmd = venv_python if os.path.exists(venv_python) else 'python'
+        
+        # Start the service in background without opening new window
+        process = subprocess.Popen(
+            [python_cmd, script_path],
+            cwd=os.path.dirname(script_path),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
+        )
         
         logger.info(f"Started sheets service with PID: {process.pid}")
         return jsonify({
@@ -694,6 +692,100 @@ def get_sheets_service_status():
         }), 500
     except Exception as e:
         logger.error(f"Failed to get sheets service status: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@dashboard_bp.route('/api/sheets/config/status', methods=['GET'])
+def get_sheets_config_status():
+    """Get configuration status for maintenance UI"""
+    try:
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        config = sheets_service.get_config()
+        
+        if config:
+            return jsonify({
+                'configured': True,
+                'active': config.get('is_active', False),
+                'sheet_url': config.get('sheet_url', ''),
+                'poll_interval': config.get('poll_interval', 30),
+                'last_row_processed': config.get('last_row_processed', 0)
+            })
+        else:
+            return jsonify({
+                'configured': False,
+                'active': False
+            })
+            
+    except Exception as e:
+        logger.error(f"Failed to get config status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/api/sheets/test-connection', methods=['GET'])
+def test_connection():
+    """Test connection to configured Google Sheet"""
+    try:
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        config = sheets_service.get_config()
+        
+        if not config or not config.get('sheet_url'):
+            return jsonify({
+                'success': False,
+                'error': 'No sheet configured'
+            }), 400
+        
+        result = sheets_service.test_sheet_connection(config['sheet_url'])
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Failed to test connection: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/api/sheets/config/last-row', methods=['POST'])
+def set_config_last_row():
+    """Set the last processed row in config"""
+    try:
+        data = request.get_json()
+        if not data or 'last_row' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'last_row is required'
+            }), 400
+        
+        last_row = int(data['last_row'])
+        if last_row < 1:
+            return jsonify({
+                'success': False,
+                'error': 'last_row must be at least 1 (to protect header row)'
+            }), 400
+        
+        # Update the configuration
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        result = sheets_service.update_last_processed_row(last_row)
+        
+        if result['success']:
+            logger.info(f"Set last processed row to {last_row}")
+            return jsonify({
+                'success': True,
+                'message': f'Last processed row set to {last_row}'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', 'Failed to update last processed row')
+            }), 500
+            
+    except ValueError:
+        return jsonify({
+            'success': False,
+            'error': 'last_row must be a valid integer'
+        }), 400
+    except Exception as e:
+        logger.error(f"Failed to set last processed row: {e}")
         return jsonify({
             'success': False,
             'error': str(e)

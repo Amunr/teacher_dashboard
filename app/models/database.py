@@ -1110,11 +1110,20 @@ class SheetsConfigModel:
         """
         try:
             with self.db.get_connection() as conn:
+                # First try with boolean True check
                 query = select(self.db.sheets_config_table).where(
-                    self.db.sheets_config_table.c.is_active == 1
+                    self.db.sheets_config_table.c.is_active.is_(True)
                 ).order_by(self.db.sheets_config_table.c.updated_at.desc()).limit(1)
                 
                 result = conn.execute(query).fetchone()
+                
+                if not result:
+                    # Fallback to integer comparison for SQLite
+                    query = select(self.db.sheets_config_table).where(
+                        self.db.sheets_config_table.c.is_active == 1
+                    ).order_by(self.db.sheets_config_table.c.updated_at.desc()).limit(1)
+                    result = conn.execute(query).fetchone()
+                
                 return dict(result._mapping) if result else None
                 
         except Exception as e:

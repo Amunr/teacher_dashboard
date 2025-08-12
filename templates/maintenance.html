@@ -329,16 +329,37 @@
                             <div class="d-flex align-items-center mb-2">
                                 <small class="text-muted me-2">Set Last Row:</small>
                                 <input type="number" class="form-control form-control-sm" id="manualLastRow" 
-                                       min="0" max="10000" style="width: 80px;" placeholder="0">
+                                       min="1" max="10000" style="width: 80px;" placeholder="1" value="1">
                                 <button type="button" class="btn btn-outline-primary btn-sm ms-2" id="setLastRowBtn">
                                     Set
                                 </button>
                             </div>
-                            <small class="text-muted">For testing: manually set which row to process next</small>
+                            <small class="text-muted">For testing: manually set which row to process next (minimum 1, header row always skipped)</small>
                         </div>
                     </div>
                     <button class="btn btn-outline-info btn-sm w-100 mt-3" id="refreshStats">
                         <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Service Control</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <small class="text-muted">Polling Service:</small>
+                        <span id="serviceStatus" class="badge bg-secondary">Unknown</span>
+                    </div>
+                    <button class="btn btn-outline-success btn-sm w-100 mb-2" id="startService">
+                        <i class="bi bi-play-circle"></i> Start Service
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm w-100 mb-2" id="stopService">
+                        <i class="bi bi-stop-circle"></i> Stop Service
+                    </button>
+                    <button class="btn btn-outline-info btn-sm w-100" id="checkServiceStatus">
+                        <i class="bi bi-question-circle"></i> Check Status
                     </button>
                 </div>
             </div>
@@ -599,27 +620,30 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load Google Sheets configuration
     function loadSheetsConfig() {
-        fetch('/api/sheets/config')
+        fetch('/api/sheets/config/status')
             .then(response => response.json())
             .then(data => {
-                if (data.success && data.config) {
-                    document.getElementById('sheetUrl').value = data.config.sheet_url || '';
-                    document.getElementById('pollInterval').value = data.config.poll_interval || 5;
-                    document.getElementById('isActive').checked = data.config.is_active || false;
-                    document.getElementById('lastRowProcessed').textContent = data.config.last_row_processed || 0;
+                if (data.configured) {
+                    document.getElementById('sheetUrl').value = data.sheet_url || '';
+                    document.getElementById('pollInterval').value = data.poll_interval || 5;
+                    document.getElementById('isActive').checked = data.active || false;
+                    document.getElementById('lastRowProcessed').textContent = data.last_row_processed || 0;
                     
-                    // A sheet is configured if there's a URL
-                    const isConfigured = data.config.sheet_url && data.config.sheet_url.trim() !== '';
-                    updateConnectionStatus(isConfigured && data.config.is_active);
+                    // Update status based on configured and active state
+                    updateConnectionStatus(data.configured, data.active);
                 } else {
                     // No configuration found
-                    updateConnectionStatus(false);
+                    document.getElementById('sheetUrl').value = '';
+                    document.getElementById('pollInterval').value = 5;
+                    document.getElementById('isActive').checked = false;
+                    document.getElementById('lastRowProcessed').textContent = '0';
+                    updateConnectionStatus(false, false);
                 }
                 loadImportStats();
             })
             .catch(error => {
                 console.error('Error loading config:', error);
-                updateConnectionStatus(false);
+                updateConnectionStatus(false, false);
             });
     }
 
@@ -645,6 +669,10 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 showAlert('Configuration saved successfully!', 'success');
+                // Auto-start the service if configuration is active
+                if (config.is_active) {
+                    startPollingService();
+                }
                 // Force reload configuration to update UI immediately
                 setTimeout(() => {
                     loadSheetsConfig();
@@ -680,16 +708,16 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                updateConnectionStatus(true);
-                showAlert(`Connection successful! Found ${data.row_count} rows.`, 'success');
+                updateConnectionStatus(true, true);
+                showAlert(`Connection successful! Found ${data.total_rows || 'unknown number of'} rows.`, 'success');
             } else {
-                updateConnectionStatus(false);
+                updateConnectionStatus(false, false);
                 showAlert('Connection failed: ' + data.error, 'danger');
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            updateConnectionStatus(false);
+            updateConnectionStatus(false, false);
             showAlert('Connection test failed', 'danger');
         })
         .finally(() => {
@@ -857,6 +885,79 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // Service Control Functions
+    function startPollingService() {
+        fetch('/api/sheets/service/start', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Polling service started successfully!', 'success');
+                checkServiceStatus();
+            } else {
+                showAlert('Failed to start service: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('Failed to start polling service', 'danger');
+        });
+    }
+
+    function stopPollingService() {
+        fetch('/api/sheets/service/stop', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Polling service stopped: ' + data.message, 'warning');
+                checkServiceStatus();
+            } else {
+                showAlert('Failed to stop service: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('Failed to stop polling service', 'danger');
+        });
+    }
+
+    function checkServiceStatus() {
+        fetch('/api/sheets/service/status')
+        .then(response => response.json())
+        .then(data => {
+            const statusElement = document.getElementById('serviceStatus');
+            if (data.success) {
+                if (data.running) {
+                    statusElement.textContent = `Running (${data.count} process(es))`;
+                    statusElement.className = 'badge bg-success';
+                } else {
+                    statusElement.textContent = 'Stopped';
+                    statusElement.className = 'badge bg-secondary';
+                }
+            } else {
+                statusElement.textContent = 'Error';
+                statusElement.className = 'badge bg-danger';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            const statusElement = document.getElementById('serviceStatus');
+            statusElement.textContent = 'Error';
+            statusElement.className = 'badge bg-danger';
+        });
+    }
+
+    // Service Control Event Listeners
+    document.getElementById('startService').addEventListener('click', startPollingService);
+    document.getElementById('stopService').addEventListener('click', stopPollingService);
+    document.getElementById('checkServiceStatus').addEventListener('click', checkServiceStatus);
+
+    // Initial service status check
+    checkServiceStatus();
+
     // Deactivate polling
     document.getElementById('deactivatePolling').addEventListener('click', function() {
         if (confirm('Stop Google Sheets polling? This will deactivate automatic imports.')) {
@@ -891,25 +992,25 @@ document.addEventListener('DOMContentLoaded', function() {
         const lastRowInput = document.getElementById('manualLastRow');
         const lastRow = parseInt(lastRowInput.value);
         
-        if (isNaN(lastRow) || lastRow < 0) {
-            showAlert('Please enter a valid row number (0 or greater)', 'warning');
+        if (isNaN(lastRow) || lastRow < 1) {
+            showAlert('Please enter a valid row number (1 or greater). Note: Header row is always skipped.', 'warning');
             return;
         }
         
-        if (confirm(`Set last processed row to ${lastRow}? This will affect which rows are imported next.`)) {
+        if (confirm(`Set last processed row to ${lastRow}? This will affect which rows are imported next. The header row (row 1) is always automatically skipped.`)) {
             fetch('/api/sheets/set-last-row', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ last_row: lastRow })
+                body: JSON.stringify({ row_number: lastRow })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showAlert(`Last row set to ${lastRow}`, 'success');
+                    showAlert(`Last row set to ${lastRow}. Next import will start from row ${lastRow + 1} (header row always skipped).`, 'success');
                     loadSheetsConfig(); // Refresh to show updated value
-                    lastRowInput.value = ''; // Clear input
+                    lastRowInput.value = '1'; // Reset to default
                 } else {
                     showAlert('Error: ' + data.error, 'danger');
                 }
@@ -922,17 +1023,22 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Helper functions
-    function updateConnectionStatus(isActive) {
+    function updateConnectionStatus(isConfigured, isActive) {
         const statusElement = document.getElementById('connectionStatus');
         const tabBadge = document.getElementById('sheetsStatusBadge');
         
-        if (isActive) {
+        if (isConfigured && isActive) {
             statusElement.textContent = 'Active';
             statusElement.className = 'badge bg-success';
-            tabBadge.textContent = 'Configured';
+            tabBadge.textContent = 'Active';
             tabBadge.className = 'badge bg-success';
+        } else if (isConfigured && !isActive) {
+            statusElement.textContent = 'Configured (Inactive)';
+            statusElement.className = 'badge bg-warning';
+            tabBadge.textContent = 'Inactive';
+            tabBadge.className = 'badge bg-warning';
         } else {
-            statusElement.textContent = 'Inactive';
+            statusElement.textContent = 'Not Configured';
             statusElement.className = 'badge bg-secondary';
             tabBadge.textContent = 'Not Configured';
             tabBadge.className = 'badge bg-info';
