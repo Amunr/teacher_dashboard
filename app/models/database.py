@@ -1184,14 +1184,35 @@ class SheetsConfigModel:
         except Exception as e:
             logger.error(f"Failed to get sheets config: {e}")
             raise
+            
+    def _get_any_config(self) -> Optional[Dict[str, Any]]:
+        """
+        Get any Google Sheets configuration (active or inactive) for update purposes.
+        
+        Returns:
+            Configuration dictionary or None if not found
+        """
+        try:
+            with self.db.get_connection() as conn:
+                query = select(self.db.sheets_config_table).order_by(
+                    self.db.sheets_config_table.c.updated_at.desc()
+                ).limit(1)
+                
+                result = conn.execute(query).fetchone()
+                return dict(result._mapping) if result else None
+                
+        except Exception as e:
+            logger.error(f"Failed to get any sheets config: {e}")
+            return None
     
-    def create_or_update_config(self, sheet_url: str, poll_interval: int = 30) -> int:
+    def create_or_update_config(self, sheet_url: str, poll_interval: int = 30, is_active: bool = True) -> int:
         """
         Create or update Google Sheets configuration.
         
         Args:
             sheet_url: Google Sheets URL
             poll_interval: Polling interval in minutes
+            is_active: Whether the configuration should be active
             
         Returns:
             Configuration ID
@@ -1200,8 +1221,8 @@ class SheetsConfigModel:
             with self.db.get_connection() as conn:
                 today = date.today()
                 
-                # Check if config exists
-                existing = self.get_config()
+                # Check if config exists (regardless of active status for update purposes)
+                existing = self._get_any_config()  # Use a helper method
                 
                 if existing:
                     # Update existing config
@@ -1210,11 +1231,12 @@ class SheetsConfigModel:
                     ).values(
                         sheet_url=sheet_url,
                         poll_interval=poll_interval,
+                        is_active=1 if is_active else 0,
                         updated_at=today
                     )
                     conn.execute(update_query)
                     conn.commit()
-                    logger.info(f"Updated sheets config {existing['id']}")
+                    logger.info(f"Updated sheets config {existing['id']}: active={is_active}")
                     return existing['id']
                 else:
                     # Create new config
@@ -1222,14 +1244,14 @@ class SheetsConfigModel:
                         sheet_url=sheet_url,
                         last_row_processed=0,
                         poll_interval=poll_interval,
-                        is_active=1,
+                        is_active=1 if is_active else 0,
                         created_at=today,
                         updated_at=today
                     )
                     result = conn.execute(insert_query)
                     conn.commit()
                     config_id = result.inserted_primary_key[0]
-                    logger.info(f"Created new sheets config {config_id}")
+                    logger.info(f"Created new sheets config {config_id}: active={is_active}")
                     return config_id
                     
         except Exception as e:
@@ -1496,7 +1518,12 @@ class SheetsImportService:
             if not sheet_id:
                 raise ValueError("Could not extract sheet ID from URL")
             
-            csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
+            # Extract GID (sheet tab ID) if present
+            gid_match = re.search(r'gid=([0-9]+)', sheets_url)
+            gid = gid_match.group(1) if gid_match else '0'
+            
+            # Build CSV URL with GID
+            csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&gid={gid}"
             logger.info(f"Converted sheets URL to CSV: {csv_url}")
             return csv_url
             

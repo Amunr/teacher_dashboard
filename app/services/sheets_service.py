@@ -31,13 +31,14 @@ class SheetsManagementService:
         """Get current Google Sheets configuration."""
         return self.config_model.get_config()
     
-    def update_config(self, sheet_url: str, poll_interval: int) -> Dict[str, Any]:
+    def update_config(self, sheet_url: str, poll_interval: int, is_active: bool = True) -> Dict[str, Any]:
         """
         Update Google Sheets configuration.
         
         Args:
             sheet_url: Google Sheets URL
             poll_interval: Polling interval in minutes
+            is_active: Whether the configuration should be active
             
         Returns:
             Configuration status
@@ -57,7 +58,7 @@ class SheetsManagementService:
                 }
             
             # Create or update configuration
-            config_id = self.config_model.create_or_update_config(sheet_url, poll_interval)
+            config_id = self.config_model.create_or_update_config(sheet_url, poll_interval, is_active)
             
             return {
                 'success': True,
@@ -242,16 +243,15 @@ class SheetsManagementService:
             return 'Service not active'
         
         try:
-            # Check if service is running
-            import psutil
+            # Check if background service is running using app context
+            from flask import current_app
             service_running = False
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                try:
-                    if proc.info['cmdline'] and 'poller.py' in ' '.join(proc.info['cmdline']):
-                        service_running = True
-                        break
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
+            try:
+                background_poller = current_app.background_poller
+                status = background_poller.get_status()
+                service_running = status['running']
+            except Exception:
+                service_running = False
             
             if not service_running:
                 return 'Service not running'
@@ -277,8 +277,6 @@ class SheetsManagementService:
             else:
                 return 'Never imported'
                 
-        except ImportError:
-            return 'Cannot determine (psutil not available)'
         except Exception as e:
             logger.error(f"Error calculating next poll time: {e}")
             return 'Error calculating'

@@ -1,17 +1,17 @@
 {
   "status": "running",
   "started_at": "2025-08-12T16:09:27.557968",
-  "current_time": "2025-08-12T16:33:27.630343",
-  "next_run_time": "2025-08-12T16:35:27.630343",
+  "current_time": "2025-08-12T17:05:27.699617",
+  "next_run_time": "2025-08-12T17:07:27.699617",
   "interval_seconds": 120,
   "interval_minutes": 2.0,
-  "cycle_count": 12,
-  "last_poll_start": "2025-08-12T16:33:27.630343",
+  "cycle_count": 28,
+  "last_poll_start": "2025-08-12T17:05:27.699617",
   "pid": 28648,
-  "last_poll_end": "2025-08-12T16:33:27.633372",
+  "last_poll_end": "2025-08-12T17:05:27.701625",
   "last_poll_result": {
     "status": "skipped",
     "message": "Google Sheets polling is disabled"
   },
-  "last_poll_duration_seconds": 0.003029
+  "last_poll_duration_seconds": 0.002008
 }

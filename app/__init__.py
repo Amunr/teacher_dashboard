@@ -116,6 +116,10 @@ def _initialize_services(app: Flask) -> None:
         app.layout_service = LayoutService(app.layout_model)
         app.dashboard_service = DashboardService(app.db_manager)
         
+        # Initialize background poller
+        from .services.background_poller import initialize_background_poller
+        app.background_poller = initialize_background_poller(app.db_manager)
+        
         app.logger.info('Services initialized successfully')
         
     except Exception as e:

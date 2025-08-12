@@ -370,6 +370,7 @@ def update_sheets_config():
         
         sheet_url = data.get('sheet_url', '').strip()
         poll_interval = data.get('poll_interval', 30)
+        is_active = data.get('is_active', True)  # Handle the is_active parameter
         
         if not sheet_url:
             return jsonify({'error': 'Sheet URL is required'}), 400
@@ -382,10 +383,14 @@ def update_sheets_config():
             return jsonify({'error': 'Poll interval must be a valid number'}), 400
         
         sheets_service = SheetsManagementService(current_app.db_manager)
-        result = sheets_service.update_config(sheet_url, poll_interval)
+        result = sheets_service.update_config(sheet_url, poll_interval, is_active)
         
         if result['success']:
-            log_operation('sheets_config_updated', {'sheet_url': sheet_url, 'poll_interval': poll_interval})
+            log_operation('sheets_config_updated', {
+                'sheet_url': sheet_url, 
+                'poll_interval': poll_interval,
+                'is_active': is_active
+            })
             return jsonify(result)
         else:
             return jsonify(result), 400
@@ -579,30 +584,9 @@ def internal_error(error) -> str:
 
 @dashboard_bp.route('/api/sheets/service/start', methods=['POST'])
 def start_sheets_service():
-    """Start the sheets polling service"""
+    """Start the sheets polling service using Flask background poller"""
     try:
-        import subprocess
-        import os
-        import platform
-        
-        # Check if service is already running
-        import psutil
-        running_processes = []
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-            try:
-                if proc.info['cmdline'] and 'poller.py' in ' '.join(proc.info['cmdline']):
-                    running_processes.append(proc.info['pid'])
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        
-        if running_processes:
-            return jsonify({
-                'success': True,
-                'message': f'Service already running with PID(s): {running_processes}',
-                'pid': running_processes[0]
-            })
-        
-        # Get configuration to check if it's properly set up
+        # Check if we have a valid configuration
         sheets_service = SheetsManagementService(current_app.db_manager)
         config = sheets_service.get_config()
         
@@ -618,32 +602,23 @@ def start_sheets_service():
                 'error': 'Google Sheets polling is disabled. Please activate it in the configuration.'
             }), 400
         
-        # Get the path to the poller.py script
-        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'poller.py')
-        
-        # Use virtual environment Python if available
-        venv_python = os.path.join(os.path.dirname(script_path), 'venv', 'Scripts', 'python.exe')
-        python_cmd = venv_python if os.path.exists(venv_python) else 'python'
-        
-        # Start the service in background without opening new window
-        # The poller will use the poll interval from the database configuration
-        process = subprocess.Popen(
-            [python_cmd, script_path],
-            cwd=os.path.dirname(script_path),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
-        )
-        
-        logger.info(f"Started sheets service with PID: {process.pid}, using {config.get('poll_interval', 30)}-minute intervals")
-        return jsonify({
-            'success': True,
-            'message': f'Sheets service started with PID: {process.pid} (polling every {config.get("poll_interval", 30)} minutes)',
-            'pid': process.pid
-        })
+        # Start the background poller
+        background_poller = current_app.background_poller
+        if background_poller.start_polling():
+            logger.info(f"Started background polling service with {config.get('poll_interval', 5)}-minute intervals")
+            return jsonify({
+                'success': True,
+                'message': f'Background polling started (every {config.get("poll_interval", 5)} minutes)',
+                'type': 'background_thread'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to start background polling service'
+            }), 500
         
     except Exception as e:
-        logger.error(f"Failed to start sheets service: {e}")
+        logger.error(f"Failed to start background polling service: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -652,41 +627,19 @@ def start_sheets_service():
 
 @dashboard_bp.route('/api/sheets/service/stop', methods=['POST'])
 def stop_sheets_service():
-    """Stop the sheets polling service"""
+    """Stop the sheets polling service using Flask background poller"""
     try:
-        import psutil
-        import os
+        background_poller = current_app.background_poller
+        background_poller.stop_polling()
         
-        # Find poller.py processes
-        stopped_count = 0
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-            try:
-                if proc.info['cmdline'] and 'poller.py' in ' '.join(proc.info['cmdline']):
-                    proc.terminate()
-                    stopped_count += 1
-                    logger.info(f"Terminated sheets service process {proc.info['pid']}")
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        
-        if stopped_count > 0:
-            return jsonify({
-                'success': True,
-                'message': f'Stopped {stopped_count} sheets service process(es)'
-            })
-        else:
-            return jsonify({
-                'success': True,
-                'message': 'No sheets service processes found running'
-            })
-            
-    except ImportError:
-        # Fallback if psutil not available
+        logger.info("Stopped background polling service")
         return jsonify({
-            'success': False,
-            'error': 'psutil package required for service management'
-        }), 500
+            'success': True,
+            'message': 'Background polling service stopped'
+        })
+        
     except Exception as e:
-        logger.error(f"Failed to stop sheets service: {e}")
+        logger.error(f"Failed to stop background polling service: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -695,37 +648,20 @@ def stop_sheets_service():
 
 @dashboard_bp.route('/api/sheets/service/status', methods=['GET'])
 def get_sheets_service_status():
-    """Get the status of the sheets polling service"""
+    """Get the status of the sheets polling service using Flask background poller"""
     try:
-        import psutil
-        
-        # Find poller.py processes
-        running_processes = []
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time']):
-            try:
-                if proc.info['cmdline'] and 'poller.py' in ' '.join(proc.info['cmdline']):
-                    running_processes.append({
-                        'pid': proc.info['pid'],
-                        'started': proc.info['create_time']
-                    })
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
+        background_poller = current_app.background_poller
+        status = background_poller.get_status()
         
         return jsonify({
             'success': True,
-            'running': len(running_processes) > 0,
-            'processes': running_processes,
-            'count': len(running_processes)
+            'running': status['running'],
+            'type': 'background_thread',
+            'count': 1 if status['running'] else 0
         })
         
-    except ImportError:
-        # Fallback if psutil not available
-        return jsonify({
-            'success': False,
-            'error': 'psutil package required for service status'
-        }), 500
     except Exception as e:
-        logger.error(f"Failed to get sheets service status: {e}")
+        logger.error(f"Failed to get background polling service status: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
