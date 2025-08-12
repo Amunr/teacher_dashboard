@@ -1,0 +1,17 @@
+{
+  "status": "running",
+  "started_at": "2025-08-12T15:24:22.623580",
+  "current_time": "2025-08-12T15:34:22.662849",
+  "next_run_time": "2025-08-12T15:36:22.662849",
+  "interval_seconds": 120,
+  "interval_minutes": 2.0,
+  "cycle_count": 5,
+  "last_poll_start": "2025-08-12T15:34:22.662849",
+  "pid": 50016,
+  "last_poll_end": "2025-08-12T15:34:22.665864",
+  "last_poll_result": {
+    "status": "skipped",
+    "message": "Google Sheets polling is disabled"
+  },
+  "last_poll_duration_seconds": 0.003015
+}
