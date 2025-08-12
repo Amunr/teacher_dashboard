@@ -257,8 +257,9 @@ class DashboardService:
         try:
             offset = (page - 1) * per_page
             
-            # Get all responses
-            responses = self.response_model.get_responses(limit=per_page, offset=offset)
+            # Get responses ordered by most recent first
+            filters = {'order_by': 'res-id', 'order_direction': 'DESC'}
+            responses = self.response_model.get_responses(filters=filters, limit=per_page, offset=offset)
             
             # Get orphaned responses
             orphaned = self.response_model.get_orphaned_responses()
@@ -266,9 +267,11 @@ class DashboardService:
             # Get student counts
             student_counts = self.get_all_student_counts()
             
-            # Count total responses for pagination
-            all_responses = self.response_model.get_responses()
-            total_responses = len(all_responses)
+            # Count total responses efficiently without loading all data
+            with self.db_manager.get_connection() as conn:
+                from sqlalchemy import select, func
+                count_query = select(func.count()).select_from(self.db_manager.responses_table)
+                total_responses = conn.execute(count_query).scalar()
             
             return {
                 'responses': responses,

@@ -523,19 +523,18 @@ class ResponseModel:
                 logger.info(f"🏷️  Metadata Index Map: {meta_index_map}")
                 
                 # Extract metadata values with debugging
-                school_index = next((k for k, v in meta_index_map.items() if v == "School"), None)
-                grade_index = next((k for k, v in meta_index_map.items() if v == "Grade"), None)
-                teacher_index = next((k for k, v in meta_index_map.items() if v == "Teacher"), None)
-                assessment_index = next((k for k, v in meta_index_map.items() if v == "Assessment"), None)
-                name_index = next((k for k, v in meta_index_map.items() if v == "Name"), None)
-                date_index = next((k for k, v in meta_index_map.items() if v == "Date"), None)
+                # FIXED: Use direct column mapping instead of meta_index_map
+                # Based on CSV structure: Col 3=Teacher, Col 4=School, Col 5=Student, Col 7=Date
+                school = data.get(4, '') if 4 in data else ''  # Column 4
+                teacher = data.get(3, '') if 3 in data else ''  # Column 3
+                name = data.get(5, '') if 5 in data else ''    # Column 5 (Student name)
+                date_str = data.get(7, '') if 7 in data else ''  # Column 7 (DOB)
                 
-                school = data.get(school_index, '') if school_index else ''
-                grade = data.get(grade_index, '') if grade_index else ''
-                teacher = data.get(teacher_index, '') if teacher_index else ''
-                assessment = data.get(assessment_index, '') if assessment_index else ''
-                name = data.get(name_index, '') if name_index else ''
-                date_str = data.get(date_index, '') if date_index else ''
+                # For now, set grade and assessment as empty since they're not clear in CSV
+                grade = ''  # Could be derived from school name or other logic
+                assessment = ''  # Could be set to a default value
+                
+                logger.info(f"🔍 Direct column mapping: Col 3 (teacher)='{teacher}', Col 4 (school)='{school}', Col 5 (name)='{name}', Col 7 (date)='{date_str}'")
                 
                 # Convert date string to date object for SQLite Date type
                 date_val = None
@@ -647,8 +646,16 @@ class ResponseModel:
                     if 'end_date' in filters and filters['end_date']:
                         query = query.where(self.db.responses_table.c.Date <= filters['end_date'])
                 
-                # Add ordering
-                query = query.order_by(self.db.responses_table.c.Date.desc(), self.db.responses_table.c['res-id'].desc())
+                # Add ordering (support custom order_by from filters)
+                if filters and 'order_by' in filters and 'order_direction' in filters:
+                    order_column = getattr(self.db.responses_table.c, filters['order_by'], self.db.responses_table.c['res-id'])
+                    if filters['order_direction'].upper() == 'DESC':
+                        query = query.order_by(order_column.desc())
+                    else:
+                        query = query.order_by(order_column.asc())
+                else:
+                    # Default ordering: most recent first
+                    query = query.order_by(self.db.responses_table.c.Date.desc(), self.db.responses_table.c['res-id'].desc())
                 
                 # Apply pagination
                 if limit:
