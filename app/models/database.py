@@ -484,32 +484,44 @@ class ResponseModel:
         """
         try:
             with self.db.get_connection() as conn:
-                today = date.today()
-                
                 if isinstance(response_data, str):
                     data = json.loads(response_data)
                 else:
                     data = response_data
+                
+                # Extract the actual form date from the data
+                actual_form_date = data.pop('_actual_form_date', None)
+                if not actual_form_date:
+                    # Fallback to today's date if no actual form date provided
+                    actual_form_date = date.today()
+                    logger.warning(f"⚠️  No actual form date provided, using today: {actual_form_date}")
+                
+                logger.info(f"📅 Using actual form date: {actual_form_date}")
                 
                 # Get next response ID
                 max_query = select(func.max(self.db.responses_table.c['res-id']))
                 result = conn.execute(max_query).fetchone()
                 next_res_id = (result[0] + 1) if result[0] is not None else 1
                 
-                # Get valid Index_IDs for today's date
+                # Get valid Index_IDs for the actual form date (not today's date)
                 valid_query = select(self.db.questions_table).where(
-                    (self.db.questions_table.c.year_start <= today) &
-                    (self.db.questions_table.c.year_end >= today) &
+                    (self.db.questions_table.c.year_start <= actual_form_date) &
+                    (self.db.questions_table.c.year_end >= actual_form_date) &
                     (self.db.questions_table.c.Domain != "MetaData")
                 ).distinct()
                 valid_questions = conn.execute(valid_query).fetchall()
                 valid_index_set = {row.Index_ID for row in valid_questions}
                 
-                # Map metadata elements to their Index_IDs
+                # If no valid layout found for this date, reject the data
+                if not valid_index_set:
+                    logger.warning(f"⚠️  No valid layout found for form date {actual_form_date}. Rejecting data.")
+                    raise ValueError(f"No valid layout exists for form date {actual_form_date}. Data will not be added.")
+                
+                # Map metadata elements to their Index_IDs for the actual form date
                 meta_elements = ["School", "Grade", "Teacher", "Assessment", "Name", "Date"]
                 meta_query = select(self.db.questions_table).where(
-                    (self.db.questions_table.c.year_start <= today) &
-                    (self.db.questions_table.c.year_end >= today) &
+                    (self.db.questions_table.c.year_start <= actual_form_date) &
+                    (self.db.questions_table.c.year_end >= actual_form_date) &
                     (self.db.questions_table.c.SubDomain.in_(meta_elements))
                 ).distinct()
                 meta_rows = conn.execute(meta_query).fetchall()
@@ -518,30 +530,35 @@ class ResponseModel:
                 meta_index_map = {row.Index_ID: row.SubDomain for row in meta_rows}
                 
                 logger.info(f"🔄 Creating response with data: {data}")
-                logger.info(f"📅 Valid questions for today ({today}): {len(valid_questions)}")
+                logger.info(f"📅 Valid questions for form date ({actual_form_date}): {len(valid_questions)}")
                 logger.info(f"📊 Valid Index_IDs: {sorted(valid_index_set)}")
                 logger.info(f"🏷️  Metadata Index Map: {meta_index_map}")
                 
                 # Extract metadata values with debugging
-                # FIXED: Use direct column mapping instead of meta_index_map
-                # Based on CSV structure: Col 3=Teacher, Col 4=School, Col 5=Student, Col 7=Date
+                # FIXED: Use direct column mapping and find Grade/Assessment from metadata map
                 school = data.get(4, '') if 4 in data else ''  # Column 4
                 teacher = data.get(3, '') if 3 in data else ''  # Column 3
                 name = data.get(5, '') if 5 in data else ''    # Column 5 (Student name)
-                date_str = data.get(7, '') if 7 in data else ''  # Column 7 (DOB)
+                date_str = data.get(7, '') if 7 in data else ''  # Column 7 (DOB - student birthday)
                 
-                # For now, set grade and assessment as empty since they're not clear in CSV
-                grade = ''  # Could be derived from school name or other logic
-                assessment = ''  # Could be set to a default value
+                # Find Grade and Assessment from metadata mapping
+                grade = ''
+                assessment = ''
+                for idx, meta_field in meta_index_map.items():
+                    if meta_field == 'Grade' and idx in data:
+                        grade = str(data[idx])
+                    elif meta_field == 'Assessment' and idx in data:
+                        assessment = str(data[idx])
                 
                 logger.info(f"🔍 Direct column mapping: Col 3 (teacher)='{teacher}', Col 4 (school)='{school}', Col 5 (name)='{name}', Col 7 (date)='{date_str}'")
+                logger.info(f"🔍 Metadata mapping: Grade='{grade}', Assessment='{assessment}'")
                 
-                # Convert date string to date object for SQLite Date type
+                # Convert student birthday to date object for SQLite Date type
                 date_val = None
                 if date_str and date_str.strip():
                     try:
                         from datetime import datetime
-                        # Try to parse various date formats
+                        # Try to parse various date formats for student birthday
                         for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y']:
                             try:
                                 date_val = datetime.strptime(date_str.strip(), fmt).date()
@@ -549,12 +566,16 @@ class ResponseModel:
                             except ValueError:
                                 continue
                         if date_val is None:
-                            logger.warning(f"⚠️  Could not parse date '{date_str}', using None")
+                            logger.warning(f"⚠️  Could not parse student birthday '{date_str}', using actual form date")
+                            date_val = actual_form_date
                     except Exception as e:
-                        logger.warning(f"⚠️  Date parsing error for '{date_str}': {e}")
-                        date_val = None
+                        logger.warning(f"⚠️  Date parsing error for '{date_str}': {e}, using actual form date")
+                        date_val = actual_form_date
+                else:
+                    # If no student birthday, use the actual form date
+                    date_val = actual_form_date
                 
-                logger.info(f"📋 Extracted metadata - School: '{school}', Grade: '{grade}', Teacher: '{teacher}', Assessment: '{assessment}', Name: '{name}', Date: '{date_str}' -> {date_val}")
+                logger.info(f"📋 Extracted metadata - School: '{school}', Grade: '{grade}', Teacher: '{teacher}', Assessment: '{assessment}', Name: '{name}', Student Birthday: '{date_str}' -> {date_val}, Form Date: {actual_form_date}")
                 
                 # Prepare response records - FIXED: iterate over dict items correctly
                 values_list = []
@@ -570,7 +591,7 @@ class ResponseModel:
                             'Teacher': teacher,
                             'Assessment': assessment,
                             'Name': name,
-                            'Date': date_val,
+                            'Date': date_val,  # This is the student birthday or form date
                             'Index_ID': index_id,
                             'Response': value
                         })
@@ -1583,6 +1604,26 @@ class SheetsImportService:
             # Convert row data to response format (index + 1 = column position)
             response_data = {}
             
+            # HARDCODED: Extract timestamp from Column A (Index_ID = 1) as the actual form date
+            actual_form_date = None
+            if row_data and len(row_data) > 0:
+                timestamp_value = str(row_data[0]).strip()
+                logger.debug(f"Extracting timestamp from Column A: '{timestamp_value}'")
+                
+                if timestamp_value:
+                    try:
+                        # Parse timestamp format: "1/7/2025 10:15:12" (Day/Month/Year Hour:Minute:Second)
+                        from datetime import datetime
+                        actual_form_date = datetime.strptime(timestamp_value, "%d/%m/%Y %H:%M:%S").date()
+                        logger.info(f"✅ Parsed form timestamp: '{timestamp_value}' -> {actual_form_date}")
+                    except ValueError as e:
+                        logger.warning(f"⚠️  Could not parse timestamp from Column A: '{timestamp_value}' - {e}")
+                        # If no valid date, skip this row entirely
+                        raise ValueError(f"Invalid timestamp in Column A: '{timestamp_value}'. Expected format: DD/MM/YYYY HH:MM:SS")
+            
+            if not actual_form_date:
+                raise ValueError("No valid timestamp found in Column A")
+            
             # Process each column
             for col_index, cell_value in enumerate(row_data):
                 index_id = col_index + 1  # Column A = 1, B = 2, etc.
@@ -1598,6 +1639,9 @@ class SheetsImportService:
                         # If conversion fails, store as string (for metadata)
                         response_data[index_id] = str(cell_value).strip()
                         logger.debug(f"Conversion failed for column {index_id}, stored as string: '{cell_value}' (error: {e})")
+            
+            # Add the actual form date to response data for processing
+            response_data['_actual_form_date'] = actual_form_date
             
             logger.debug(f"Final response_data for row {sheet_row_number}: {response_data}")
             

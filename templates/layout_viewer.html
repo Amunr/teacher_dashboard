@@ -127,12 +127,45 @@ window.addEventListener('DOMContentLoaded', function() {
                                 </h5>
                             </div>
                             <div class="card-body">
+                                {# Hardcoded Column A as Timestamp #}
+                                <div class="metadata-row mb-2">
+                                    <div class="row g-2">
+                                        <div class="col-md-6">
+                                            <div class="form-control form-control-sm border-warning border-2 rounded-3 bg-warning bg-opacity-20 fw-bold">
+                                                ⏰ Form Timestamp (Column A)
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="form-control form-control-sm border-warning border-2 rounded-3 bg-warning bg-opacity-20 fw-bold">
+                                                1
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="text-warning text-center pt-2">
+                                                <i class="bi bi-exclamation-triangle fw-bold"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-1">
+                                        <div class="col-12">
+                                            <small class="text-warning fw-bold">
+                                                <i class="bi bi-info-circle"></i> HARDCODED: DD/MM/YYYY HH:MM:SS format
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
                                 {% for metadata in metadata_list %}
                                 <div class="metadata-row mb-2">
                                     <div class="row g-2">
                                         <div class="col-md-6">
                                             <div class="form-control form-control-sm border-info border-2 rounded-3 bg-light">
                                                 {{ metadata.name }}
+                                                {% if metadata.name == 'Date' %}
+                                                    <small class="text-muted d-block">
+                                                        <i class="bi bi-info-circle"></i> Student Birthday (not form date)
+                                                    </small>
+                                                {% endif %}
                                             </div>
                                         </div>
                                         <div class="col-md-4">

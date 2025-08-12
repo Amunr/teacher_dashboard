@@ -160,6 +160,23 @@ window.addEventListener('DOMContentLoaded', function() {
                                     </div>
                                     <div class="card-body">
                                         <div class="row g-2">
+                                            {# Hardcoded Column A as Timestamp #}
+                                            <div class="col-12 mb-2">
+                                                <div class="row g-2 align-items-center">
+                                                    <div class="col-md-5">
+                                                        <input type="text" class="form-control form-control-sm border-warning border-2 rounded-3 bg-warning bg-opacity-20 fw-bold" value="⏰ Form Timestamp (Column A)" readonly>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <input type="number" class="form-control form-control-sm border-warning border-2 rounded-3 bg-warning bg-opacity-20 fw-bold" value="1" readonly>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <small class="text-warning fw-bold">
+                                                            <i class="bi bi-exclamation-triangle"></i> HARDCODED: DD/MM/YYYY HH:MM:SS
+                                                        </small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
                                             {% set meta_names = ['Teacher Name', 'Student Name', 'Grade', 'Assessment Type', 'Date', 'School'] %}
                                             {% for meta_name in meta_names %}
                                                 {% set meta = (metadata_list | selectattr('name', 'equalto', meta_name) | list | first) %}
@@ -171,7 +188,13 @@ window.addEventListener('DOMContentLoaded', function() {
                                                         <div class="col-md-3">
                                                             <input type="number" class="form-control form-control-sm border-info border-2 rounded-3 bg-light" name="metadata_id_{{ meta.id if meta else meta_name|replace(' ', '_') }}" value="{{ meta.question_id if meta else '' }}">
                                                         </div>
-                                                        <div class="col-md-4"></div>
+                                                        <div class="col-md-4">
+                                                            {% if meta_name == 'Date' %}
+                                                                <small class="text-muted">
+                                                                    <i class="bi bi-info-circle"></i> Student Birthday (not form date)
+                                                                </small>
+                                                            {% endif %}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             {% endfor %}
