@@ -69,6 +69,9 @@ class SheetsPollerService:
             response = requests.get(csv_url, timeout=30)
             response.raise_for_status()
             
+            # Increase CSV field size limit to handle large content
+            csv.field_size_limit(1000000)  # 1MB limit
+            
             # Parse CSV data
             csv_content = response.text
             csv_reader = csv.reader(StringIO(csv_content))
@@ -138,11 +141,22 @@ class SheetsPollerService:
                         continue
                     
                     # Process the row
+                    logger.info(f"🔄 Processing row {current_row_number} with {len(row_data)} columns")
+                    logger.debug(f"📊 Row data: {row_data}")
                     res_id = self.import_service.process_sheet_row(row_data, current_row_number)
                     processed_count += 1
                     last_successful_row = current_row_number
                     
-                    logger.info(f"Successfully processed row {current_row_number}, created res_id {res_id}")
+                    logger.info(f"✅ Successfully processed row {current_row_number}, created res_id {res_id}")
+                    
+                    # Check if response was actually saved
+                    with self.db_manager.get_connection() as conn:
+                        from sqlalchemy import select, func
+                        count_query = select(func.count()).select_from(self.db_manager.responses_table).where(
+                            self.db_manager.responses_table.c['res-id'] == res_id
+                        )
+                        response_count = conn.execute(count_query).scalar()
+                        logger.info(f"📋 Response {res_id} has {response_count} records in database")
                     
                 except Exception as e:
                     logger.error(f"Failed to process row {current_row_number}: {e}")

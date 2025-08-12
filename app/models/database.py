@@ -514,10 +514,15 @@ class ResponseModel:
                 ).distinct()
                 meta_rows = conn.execute(meta_query).fetchall()
                 
-                # Map SubDomain to Index_ID
+                # Create metadata index map from the query results
                 meta_index_map = {row.Index_ID: row.SubDomain for row in meta_rows}
                 
-                # Extract metadata values
+                logger.info(f"🔄 Creating response with data: {data}")
+                logger.info(f"📅 Valid questions for today ({today}): {len(valid_questions)}")
+                logger.info(f"📊 Valid Index_IDs: {sorted(valid_index_set)}")
+                logger.info(f"🏷️  Metadata Index Map: {meta_index_map}")
+                
+                # Extract metadata values with debugging
                 school_index = next((k for k, v in meta_index_map.items() if v == "School"), None)
                 grade_index = next((k for k, v in meta_index_map.items() if v == "Grade"), None)
                 teacher_index = next((k for k, v in meta_index_map.items() if v == "Teacher"), None)
@@ -525,19 +530,40 @@ class ResponseModel:
                 name_index = next((k for k, v in meta_index_map.items() if v == "Name"), None)
                 date_index = next((k for k, v in meta_index_map.items() if v == "Date"), None)
                 
-                school = data.get(school_index, '')
-                grade = data.get(grade_index, '')
-                teacher = data.get(teacher_index, '')
-                assessment = data.get(assessment_index, '')
-                name = data.get(name_index, '')
-                date_val = data.get(date_index, '')
+                school = data.get(school_index, '') if school_index else ''
+                grade = data.get(grade_index, '') if grade_index else ''
+                teacher = data.get(teacher_index, '') if teacher_index else ''
+                assessment = data.get(assessment_index, '') if assessment_index else ''
+                name = data.get(name_index, '') if name_index else ''
+                date_str = data.get(date_index, '') if date_index else ''
                 
-                # Prepare response records
+                # Convert date string to date object for SQLite Date type
+                date_val = None
+                if date_str and date_str.strip():
+                    try:
+                        from datetime import datetime
+                        # Try to parse various date formats
+                        for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y']:
+                            try:
+                                date_val = datetime.strptime(date_str.strip(), fmt).date()
+                                break
+                            except ValueError:
+                                continue
+                        if date_val is None:
+                            logger.warning(f"⚠️  Could not parse date '{date_str}', using None")
+                    except Exception as e:
+                        logger.warning(f"⚠️  Date parsing error for '{date_str}': {e}")
+                        date_val = None
+                
+                logger.info(f"📋 Extracted metadata - School: '{school}', Grade: '{grade}', Teacher: '{teacher}', Assessment: '{assessment}', Name: '{name}', Date: '{date_str}' -> {date_val}")
+                
+                # Prepare response records - FIXED: iterate over dict items correctly
                 values_list = []
-                for index, value in enumerate(data):
-                    index_id = index + 1
+                for index_id, value in data.items():
+                    logger.debug(f"🔍 Processing Index_ID {index_id} with value '{value}' (type: {type(value)})")
                     
                     if index_id in valid_index_set:
+                        logger.debug(f"✅ Index_ID {index_id} is valid, adding to response")
                         values_list.append({
                             'res-id': next_res_id,
                             'School': school,
@@ -549,11 +575,17 @@ class ResponseModel:
                             'Index_ID': index_id,
                             'Response': value
                         })
+                    else:
+                        logger.debug(f"❌ Index_ID {index_id} is not valid for current layout, skipping")
+                
+                logger.info(f"📝 Prepared {len(values_list)} response records for insertion")
                 
                 if values_list:
                     conn.execute(insert(self.db.responses_table), values_list)
                     conn.commit()
-                    logger.info(f"Created response {next_res_id} with {len(values_list)} items")
+                    logger.info(f"✅ Created response {next_res_id} with {len(values_list)} items")
+                else:
+                    logger.warning(f"⚠️  No valid data to insert for response {next_res_id}")
                 
                 return next_res_id
                 
