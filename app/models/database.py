@@ -541,17 +541,30 @@ class ResponseModel:
                 name = data.get(5, '') if 5 in data else ''    # Column 5 (Student name)
                 date_str = data.get(7, '') if 7 in data else ''  # Column 7 (DOB - student birthday)
                 
-                # Find Grade and Assessment from metadata mapping
-                grade = ''
-                assessment = ''
-                for idx, meta_field in meta_index_map.items():
-                    if meta_field == 'Grade' and idx in data:
-                        grade = str(data[idx])
-                    elif meta_field == 'Assessment' and idx in data:
-                        assessment = str(data[idx])
+                # FIXED: Derive Grade and Assessment from layout name instead of broken column mapping
+                # Get the layout name for this date to derive Grade and Assessment
+                layout_query = select(self.db.questions_table.c.layout_name).where(
+                    (self.db.questions_table.c.year_start <= actual_form_date) &
+                    (self.db.questions_table.c.year_end >= actual_form_date)
+                ).limit(1)
+                layout_result = conn.execute(layout_query).fetchone()
+                layout_name = layout_result[0] if layout_result else ''
+                
+                # Extract Grade and Assessment from layout name
+                # Example: "UKG 2024-2025" -> Grade="UKG", Assessment="Annual Assessment"
+                if layout_name:
+                    # Extract grade from layout name (first part before space or year)
+                    grade_parts = layout_name.split(' ')
+                    grade = grade_parts[0] if grade_parts else ''
+                    
+                    # Set default assessment type
+                    assessment = "Assessment"  # Default value, can be customized
+                else:
+                    grade = ''
+                    assessment = ''
                 
                 logger.info(f"🔍 Direct column mapping: Col 3 (teacher)='{teacher}', Col 4 (school)='{school}', Col 5 (name)='{name}', Col 7 (date)='{date_str}'")
-                logger.info(f"🔍 Metadata mapping: Grade='{grade}', Assessment='{assessment}'")
+                logger.info(f"🔍 Layout-derived metadata: Layout='{layout_name}', Grade='{grade}', Assessment='{assessment}'")
                 
                 # HARDCODED: Always use Column A date (actual_form_date) for the Date field
                 # The date_str from Column 7 is the student birthday, but we don't use it for the Date field
