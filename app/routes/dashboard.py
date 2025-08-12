@@ -585,14 +585,48 @@ def start_sheets_service():
         import os
         import platform
         
-        # Get the path to the sheets_poller.py script
-        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'sheets_poller.py')
+        # Check if service is already running
+        import psutil
+        running_processes = []
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.info['cmdline'] and 'poller.py' in ' '.join(proc.info['cmdline']):
+                    running_processes.append(proc.info['pid'])
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        if running_processes:
+            return jsonify({
+                'success': True,
+                'message': f'Service already running with PID(s): {running_processes}',
+                'pid': running_processes[0]
+            })
+        
+        # Get configuration to check if it's properly set up
+        sheets_service = SheetsManagementService(current_app.db_manager)
+        config = sheets_service.get_config()
+        
+        if not config:
+            return jsonify({
+                'success': False,
+                'error': 'No Google Sheets configuration found. Please configure sheets first.'
+            }), 400
+        
+        if not config.get('is_active', False):
+            return jsonify({
+                'success': False,
+                'error': 'Google Sheets polling is disabled. Please activate it in the configuration.'
+            }), 400
+        
+        # Get the path to the poller.py script
+        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'poller.py')
         
         # Use virtual environment Python if available
         venv_python = os.path.join(os.path.dirname(script_path), 'venv', 'Scripts', 'python.exe')
         python_cmd = venv_python if os.path.exists(venv_python) else 'python'
         
         # Start the service in background without opening new window
+        # The poller will use the poll interval from the database configuration
         process = subprocess.Popen(
             [python_cmd, script_path],
             cwd=os.path.dirname(script_path),
@@ -601,10 +635,10 @@ def start_sheets_service():
             creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
         )
         
-        logger.info(f"Started sheets service with PID: {process.pid}")
+        logger.info(f"Started sheets service with PID: {process.pid}, using {config.get('poll_interval', 30)}-minute intervals")
         return jsonify({
             'success': True,
-            'message': f'Sheets service started with PID: {process.pid}',
+            'message': f'Sheets service started with PID: {process.pid} (polling every {config.get("poll_interval", 30)} minutes)',
             'pid': process.pid
         })
         
@@ -623,11 +657,11 @@ def stop_sheets_service():
         import psutil
         import os
         
-        # Find sheets_poller.py processes
+        # Find poller.py processes
         stopped_count = 0
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
-                if proc.info['cmdline'] and 'sheets_poller.py' in ' '.join(proc.info['cmdline']):
+                if proc.info['cmdline'] and 'poller.py' in ' '.join(proc.info['cmdline']):
                     proc.terminate()
                     stopped_count += 1
                     logger.info(f"Terminated sheets service process {proc.info['pid']}")
@@ -665,11 +699,11 @@ def get_sheets_service_status():
     try:
         import psutil
         
-        # Find sheets_poller.py processes
+        # Find poller.py processes
         running_processes = []
         for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time']):
             try:
-                if proc.info['cmdline'] and 'sheets_poller.py' in ' '.join(proc.info['cmdline']):
+                if proc.info['cmdline'] and 'poller.py' in ' '.join(proc.info['cmdline']):
                     running_processes.append({
                         'pid': proc.info['pid'],
                         'started': proc.info['create_time']

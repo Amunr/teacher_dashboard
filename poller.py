@@ -52,7 +52,7 @@ def poll_once(db_manager: DatabaseManager) -> dict:
             'message': 'No Google Sheets configuration found'
         }
     
-    if not config.get('enabled', False):
+    if not config.get('is_active', False):
         return {
             'status': 'skipped',
             'message': 'Google Sheets polling is disabled'
@@ -60,10 +60,10 @@ def poll_once(db_manager: DatabaseManager) -> dict:
     
     try:
         # Trigger import
-        result = sheets_service.import_data()
+        result = sheets_service.manual_import()
         return {
             'status': 'success',
-            'message': f"Import completed: {result['message']}",
+            'message': f"Import completed: {result.get('message', 'Success')}",
             'details': result
         }
     except Exception as e:
@@ -78,13 +78,30 @@ def poll_continuously(db_manager: DatabaseManager, interval: int = 300):
     
     Args:
         db_manager: Database manager instance
-        interval: Polling interval in seconds
+        interval: Default polling interval in seconds (overridden by config)
     """
     logger = logging.getLogger('sheets_poller')
-    logger.info(f"Starting continuous polling every {interval} seconds...")
     
     while True:
         try:
+            # Get current configuration to check if we should continue and what interval to use
+            sheets_service = SheetsManagementService(db_manager)
+            config = sheets_service.get_config()
+            
+            if not config:
+                logger.warning("No Google Sheets configuration found, waiting...")
+                time.sleep(60)  # Wait 1 minute before checking again
+                continue
+                
+            if not config.get('is_active', False):
+                logger.info("Google Sheets polling is disabled, waiting...")
+                time.sleep(60)  # Wait 1 minute before checking again
+                continue
+            
+            # Use poll interval from configuration (convert minutes to seconds)
+            configured_interval = config.get('poll_interval', interval // 60) * 60
+            logger.info(f"Starting polling cycle (interval: {configured_interval // 60} minutes)...")
+            
             result = poll_once(db_manager)
             logger.info(f"Polling result: {result}")
             
@@ -93,10 +110,13 @@ def poll_continuously(db_manager: DatabaseManager, interval: int = 300):
             break
         except Exception as e:
             logger.error(f"Unexpected error during polling: {e}")
+            # Use default interval on error
+            configured_interval = interval
         
         # Wait for next cycle
         try:
-            time.sleep(interval)
+            logger.info(f"Next poll in {configured_interval // 60} minutes...")
+            time.sleep(configured_interval)
         except KeyboardInterrupt:
             logger.info("Polling stopped by user")
             break

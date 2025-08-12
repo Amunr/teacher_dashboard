@@ -193,18 +193,27 @@ class SheetsManagementService:
             }
     
     def get_import_stats(self) -> Dict[str, Any]:
-        """Get statistics about imports."""
+        """Get statistics about imports including next poll time."""
         try:
             config = self.get_config()
             failed_imports = self.get_failed_imports()
             
+            # Calculate next poll time
+            next_poll = self._calculate_next_poll_time(config)
+            
             stats = {
-                'is_configured': config is not None,
-                'last_row_processed': config['last_row_processed'] if config else 0,
-                'poll_interval': config['poll_interval'] if config else 0,
-                'sheet_url': config['sheet_url'] if config else '',
-                'failed_imports_count': len(failed_imports),
-                'is_active': config['is_active'] if config else False
+                'success': True,
+                'stats': {
+                    'is_configured': config is not None,
+                    'last_row_processed': config['last_row_processed'] if config else 0,
+                    'poll_interval': config['poll_interval'] if config else 0,
+                    'sheet_url': config['sheet_url'] if config else '',
+                    'failed_imports': len(failed_imports),
+                    'total_imported': self._get_total_imported_count(),
+                    'last_import': self._get_last_import_time(),
+                    'next_poll': next_poll,
+                    'is_active': config['is_active'] if config else False
+                }
             }
             
             return stats
@@ -212,13 +221,113 @@ class SheetsManagementService:
         except Exception as e:
             logger.error(f"Failed to get import stats: {e}")
             return {
-                'is_configured': False,
-                'last_row_processed': 0,
-                'poll_interval': 0,
-                'sheet_url': '',
-                'failed_imports_count': 0,
-                'is_active': False
+                'success': False,
+                'error': str(e),
+                'stats': {
+                    'is_configured': False,
+                    'last_row_processed': 0,
+                    'poll_interval': 0,
+                    'sheet_url': '',
+                    'failed_imports': 0,
+                    'total_imported': 0,
+                    'last_import': 'Never',
+                    'next_poll': '-',
+                    'is_active': False
+                }
             }
+
+    def _calculate_next_poll_time(self, config: Optional[Dict[str, Any]]) -> str:
+        """Calculate when the next poll should occur."""
+        if not config or not config.get('is_active'):
+            return 'Service not active'
+        
+        try:
+            # Check if service is running
+            import psutil
+            service_running = False
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['cmdline'] and 'poller.py' in ' '.join(proc.info['cmdline']):
+                        service_running = True
+                        break
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            if not service_running:
+                return 'Service not running'
+            
+            # Get last import time and calculate next poll
+            from datetime import datetime, timedelta
+            last_import_time = self._get_last_import_datetime()
+            if last_import_time:
+                poll_interval_minutes = config.get('poll_interval', 30)
+                next_poll_time = last_import_time + timedelta(minutes=poll_interval_minutes)
+                
+                # Calculate time until next poll
+                now = datetime.now()
+                if next_poll_time <= now:
+                    return 'Due now'
+                else:
+                    time_diff = next_poll_time - now
+                    minutes_remaining = int(time_diff.total_seconds() / 60)
+                    if minutes_remaining < 1:
+                        return 'Less than 1 minute'
+                    else:
+                        return f'{minutes_remaining} minutes'
+            else:
+                return 'Never imported'
+                
+        except ImportError:
+            return 'Cannot determine (psutil not available)'
+        except Exception as e:
+            logger.error(f"Error calculating next poll time: {e}")
+            return 'Error calculating'
+
+    def _get_total_imported_count(self) -> int:
+        """Get total number of imported responses."""
+        try:
+            with self.db_manager.get_connection() as conn:
+                from sqlalchemy import text
+                result = conn.execute(text("SELECT COUNT(*) FROM responses"))
+                return result.fetchone()[0]
+        except Exception:
+            return 0
+
+    def _get_last_import_time(self) -> str:
+        """Get formatted last import time."""
+        try:
+            last_import = self._get_last_import_datetime()
+            if last_import:
+                return last_import.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                return 'Never'
+        except Exception:
+            return 'Unknown'
+
+    def _get_last_import_datetime(self) -> Optional[Any]:
+        """Get last import datetime object."""
+        try:
+            # Get the most recent response creation time (approximate last import)
+            with self.db_manager.get_connection() as conn:
+                from sqlalchemy import text
+                result = conn.execute(text("""
+                    SELECT MAX([res-id]) FROM responses
+                """))
+                max_res_id = result.fetchone()[0]
+                
+                if max_res_id:
+                    # For now, use file modification time as proxy
+                    # In a production system, you'd want to store actual import timestamps
+                    import os
+                    from datetime import datetime
+                    db_file = 'data.db'  # This should come from config
+                    if os.path.exists(db_file):
+                        return datetime.fromtimestamp(os.path.getmtime(db_file))
+                
+            return None
+        except Exception as e:
+            logger.error(f"Error getting last import time: {e}")
+            return None
     
     def deactivate_config(self) -> Dict[str, Any]:
         """Deactivate the current configuration."""
