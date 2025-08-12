@@ -553,29 +553,11 @@ class ResponseModel:
                 logger.info(f"🔍 Direct column mapping: Col 3 (teacher)='{teacher}', Col 4 (school)='{school}', Col 5 (name)='{name}', Col 7 (date)='{date_str}'")
                 logger.info(f"🔍 Metadata mapping: Grade='{grade}', Assessment='{assessment}'")
                 
-                # Convert student birthday to date object for SQLite Date type
-                date_val = None
-                if date_str and date_str.strip():
-                    try:
-                        from datetime import datetime
-                        # Try to parse various date formats for student birthday
-                        for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y']:
-                            try:
-                                date_val = datetime.strptime(date_str.strip(), fmt).date()
-                                break
-                            except ValueError:
-                                continue
-                        if date_val is None:
-                            logger.warning(f"⚠️  Could not parse student birthday '{date_str}', using actual form date")
-                            date_val = actual_form_date
-                    except Exception as e:
-                        logger.warning(f"⚠️  Date parsing error for '{date_str}': {e}, using actual form date")
-                        date_val = actual_form_date
-                else:
-                    # If no student birthday, use the actual form date
-                    date_val = actual_form_date
+                # HARDCODED: Always use Column A date (actual_form_date) for the Date field
+                # The date_str from Column 7 is the student birthday, but we don't use it for the Date field
+                date_val = actual_form_date
                 
-                logger.info(f"📋 Extracted metadata - School: '{school}', Grade: '{grade}', Teacher: '{teacher}', Assessment: '{assessment}', Name: '{name}', Student Birthday: '{date_str}' -> {date_val}, Form Date: {actual_form_date}")
+                logger.info(f"📋 Extracted metadata - School: '{school}', Grade: '{grade}', Teacher: '{teacher}', Assessment: '{assessment}', Name: '{name}', Student Birthday: '{date_str}' (not used), HARDCODED Date: {date_val} (from Column A)")
                 
                 # Prepare response records - FIXED: iterate over dict items correctly
                 values_list = []
@@ -591,7 +573,7 @@ class ResponseModel:
                             'Teacher': teacher,
                             'Assessment': assessment,
                             'Name': name,
-                            'Date': date_val,  # This is the student birthday or form date
+                            'Date': date_val,  # HARDCODED: Always Column A timestamp
                             'Index_ID': index_id,
                             'Response': value
                         })
@@ -1613,13 +1595,22 @@ class SheetsImportService:
                 if timestamp_value:
                     try:
                         # Parse timestamp format: "1/7/2025 10:15:12" (Day/Month/Year Hour:Minute:Second)
+                        # But we only keep the date part, dropping hour/minute/second
                         from datetime import datetime
-                        actual_form_date = datetime.strptime(timestamp_value, "%d/%m/%Y %H:%M:%S").date()
-                        logger.info(f"✅ Parsed form timestamp: '{timestamp_value}' -> {actual_form_date}")
+                        if ' ' in timestamp_value:
+                            # If it has time component, extract just the date part
+                            date_part = timestamp_value.split(' ')[0]
+                        else:
+                            # If it's just a date, use as is
+                            date_part = timestamp_value
+                        
+                        # Parse just the date: "1/7/2025" -> Day/Month/Year
+                        actual_form_date = datetime.strptime(date_part, "%d/%m/%Y").date()
+                        logger.info(f"✅ Parsed form date (dropped time): '{timestamp_value}' -> {actual_form_date}")
                     except ValueError as e:
                         logger.warning(f"⚠️  Could not parse timestamp from Column A: '{timestamp_value}' - {e}")
                         # If no valid date, skip this row entirely
-                        raise ValueError(f"Invalid timestamp in Column A: '{timestamp_value}'. Expected format: DD/MM/YYYY HH:MM:SS")
+                        raise ValueError(f"Invalid timestamp in Column A: '{timestamp_value}'. Expected format: DD/MM/YYYY or DD/MM/YYYY HH:MM:SS")
             
             if not actual_form_date:
                 raise ValueError("No valid timestamp found in Column A")
