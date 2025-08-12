@@ -11,9 +11,7 @@ import os
 import argparse
 import logging
 import time
-import json
 from pathlib import Path
-from datetime import datetime, timedelta
 
 # Add the current directory to Python path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -33,22 +31,6 @@ def setup_logging(log_file: str = 'sheets_poller.log'):
         ]
     )
     return logging.getLogger('sheets_poller')
-
-def write_status_file(status_data: dict, status_file: str = 'poller_status.json'):
-    """Write current poller status to a file for monitoring."""
-    try:
-        with open(status_file, 'w') as f:
-            json.dump(status_data, f, indent=2, default=str)
-    except Exception as e:
-        logging.getLogger('sheets_poller').warning(f"Failed to write status file: {e}")
-
-def read_status_file(status_file: str = 'poller_status.json') -> dict:
-    """Read current poller status from file."""
-    try:
-        with open(status_file, 'r') as f:
-            return json.load(f)
-    except:
-        return {}
 
 def poll_once(db_manager: DatabaseManager) -> dict:
     """
@@ -101,75 +83,22 @@ def poll_continuously(db_manager: DatabaseManager, interval: int = 300):
     logger = logging.getLogger('sheets_poller')
     logger.info(f"Starting continuous polling every {interval} seconds...")
     
-    start_time = datetime.now()
-    cycle_count = 0
-    
     while True:
         try:
-            current_time = datetime.now()
-            next_run_time = current_time + timedelta(seconds=interval)
-            
-            # Write status before polling
-            status_data = {
-                'status': 'running',
-                'started_at': start_time.isoformat(),
-                'current_time': current_time.isoformat(),
-                'next_run_time': next_run_time.isoformat(),
-                'interval_seconds': interval,
-                'interval_minutes': interval / 60,
-                'cycle_count': cycle_count,
-                'last_poll_start': current_time.isoformat(),
-                'pid': os.getpid()
-            }
-            write_status_file(status_data)
-            
-            # Perform the poll
-            logger.info(f"Starting poll cycle {cycle_count + 1} at {current_time.strftime('%H:%M:%S')}")
             result = poll_once(db_manager)
-            
-            poll_end_time = datetime.now()
-            
-            # Update status after polling
-            status_data.update({
-                'last_poll_end': poll_end_time.isoformat(),
-                'last_poll_result': result,
-                'last_poll_duration_seconds': (poll_end_time - current_time).total_seconds()
-            })
-            write_status_file(status_data)
-            
-            logger.info(f"Poll cycle {cycle_count + 1} completed: {result}")
-            cycle_count += 1
+            logger.info(f"Polling result: {result}")
             
         except KeyboardInterrupt:
             logger.info("Polling stopped by user")
-            # Write final status
-            write_status_file({
-                'status': 'stopped',
-                'stopped_at': datetime.now().isoformat(),
-                'total_cycles': cycle_count
-            })
             break
         except Exception as e:
             logger.error(f"Unexpected error during polling: {e}")
-            # Write error status
-            status_data.update({
-                'status': 'error',
-                'last_error': str(e),
-                'error_time': datetime.now().isoformat()
-            })
-            write_status_file(status_data)
         
         # Wait for next cycle
         try:
-            logger.info(f"Next poll in {interval} seconds ({interval/60:.1f} minutes) at {next_run_time.strftime('%H:%M:%S')}")
             time.sleep(interval)
         except KeyboardInterrupt:
             logger.info("Polling stopped by user")
-            write_status_file({
-                'status': 'stopped',
-                'stopped_at': datetime.now().isoformat(),
-                'total_cycles': cycle_count
-            })
             break
 
 def main():

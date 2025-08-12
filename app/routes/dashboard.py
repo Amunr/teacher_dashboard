@@ -585,36 +585,27 @@ def start_sheets_service():
         import os
         import platform
         
-        # Get the config to determine polling interval
-        sheets_service = SheetsManagementService(current_app.db_manager)
-        config = sheets_service.get_config()
-        poll_interval = config.get('poll_interval', 2) if config else 2  # Default to 2 minutes as user requested
-        
-        # Convert minutes to seconds for the poller
-        interval_seconds = poll_interval * 60
-        
-        # Get the path to the poller.py script (FIXED: use poller.py instead of sheets_poller.py)
-        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'poller.py')
+        # Get the path to the sheets_poller.py script
+        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'sheets_poller.py')
         
         # Use virtual environment Python if available
         venv_python = os.path.join(os.path.dirname(script_path), 'venv', 'Scripts', 'python.exe')
         python_cmd = venv_python if os.path.exists(venv_python) else 'python'
         
-        # Start the service in background with specified interval
+        # Start the service in background without opening new window
         process = subprocess.Popen(
-            [python_cmd, script_path, '--interval', str(interval_seconds)],
+            [python_cmd, script_path],
             cwd=os.path.dirname(script_path),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
         )
         
-        logger.info(f"Started sheets service with PID: {process.pid}, interval: {poll_interval} minutes")
+        logger.info(f"Started sheets service with PID: {process.pid}")
         return jsonify({
             'success': True,
-            'message': f'Sheets service started with PID: {process.pid}, polling every {poll_interval} minutes',
-            'pid': process.pid,
-            'poll_interval': poll_interval
+            'message': f'Sheets service started with PID: {process.pid}',
+            'pid': process.pid
         })
         
     except Exception as e:
@@ -632,11 +623,11 @@ def stop_sheets_service():
         import psutil
         import os
         
-        # Find poller.py processes (FIXED: look for poller.py instead of sheets_poller.py)
+        # Find sheets_poller.py processes
         stopped_count = 0
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
-                if proc.info['cmdline'] and 'poller.py' in ' '.join(proc.info['cmdline']):
+                if proc.info['cmdline'] and 'sheets_poller.py' in ' '.join(proc.info['cmdline']):
                     proc.terminate()
                     stopped_count += 1
                     logger.info(f"Terminated sheets service process {proc.info['pid']}")
@@ -670,65 +661,27 @@ def stop_sheets_service():
 
 @dashboard_bp.route('/api/sheets/service/status', methods=['GET'])
 def get_sheets_service_status():
-    """Get the status of the sheets polling service with detailed timing info"""
+    """Get the status of the sheets polling service"""
     try:
         import psutil
-        import time
-        from datetime import datetime, timedelta
         
-        # Get config to determine polling interval
-        sheets_service = SheetsManagementService(current_app.db_manager)
-        config = sheets_service.get_config()
-        poll_interval_minutes = config.get('poll_interval', 2) if config else 2
-        
-        # Find poller.py processes (FIXED: look for poller.py instead of sheets_poller.py)
+        # Find sheets_poller.py processes
         running_processes = []
         for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time']):
             try:
-                if proc.info['cmdline'] and 'poller.py' in ' '.join(proc.info['cmdline']):
-                    start_time = datetime.fromtimestamp(proc.info['create_time'])
-                    current_time = datetime.now()
-                    
-                    # Calculate next run time based on polling interval
-                    elapsed_time = current_time - start_time
-                    total_seconds_elapsed = elapsed_time.total_seconds()
-                    interval_seconds = poll_interval_minutes * 60
-                    
-                    # Calculate how many cycles have completed
-                    cycles_completed = int(total_seconds_elapsed // interval_seconds)
-                    next_cycle_start = start_time + timedelta(seconds=(cycles_completed + 1) * interval_seconds)
-                    
-                    # Calculate time until next run
-                    time_until_next = next_cycle_start - current_time
-                    minutes_until_next = max(0, int(time_until_next.total_seconds() / 60))
-                    
+                if proc.info['cmdline'] and 'sheets_poller.py' in ' '.join(proc.info['cmdline']):
                     running_processes.append({
                         'pid': proc.info['pid'],
-                        'started': proc.info['create_time'],
-                        'started_formatted': start_time.strftime('%Y-%m-%d %H:%M:%S'),
-                        'uptime_minutes': int(elapsed_time.total_seconds() / 60),
-                        'poll_interval_minutes': poll_interval_minutes,
-                        'cycles_completed': cycles_completed,
-                        'next_run': next_cycle_start.strftime('%Y-%m-%d %H:%M:%S'),
-                        'minutes_until_next_run': minutes_until_next
+                        'started': proc.info['create_time']
                     })
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
         
-        is_running = len(running_processes) > 0
-        status_message = f"Service is {'running' if is_running else 'stopped'}"
-        
-        if is_running:
-            proc = running_processes[0]  # Get first process info
-            status_message += f" - next run in {proc['minutes_until_next_run']} minutes"
-        
         return jsonify({
             'success': True,
-            'running': is_running,
+            'running': len(running_processes) > 0,
             'processes': running_processes,
-            'count': len(running_processes),
-            'status_message': status_message,
-            'poll_interval_minutes': poll_interval_minutes
+            'count': len(running_processes)
         })
         
     except ImportError:
@@ -769,88 +722,6 @@ def get_sheets_config_status():
     except Exception as e:
         logger.error(f"Failed to get config status: {e}")
         return jsonify({'error': str(e)}), 500
-
-
-@dashboard_bp.route('/api/sheets/service/detailed-status', methods=['GET'])
-def get_detailed_service_status():
-    """Get detailed service status including next run time from status file"""
-    try:
-        import json
-        import os
-        from datetime import datetime
-        
-        # Try to read status file created by poller
-        status_file = 'poller_status.json'
-        status_data = {}
-        
-        if os.path.exists(status_file):
-            try:
-                with open(status_file, 'r') as f:
-                    status_data = json.load(f)
-            except:
-                pass
-        
-        # Also check if process is actually running
-        import psutil
-        process_running = False
-        running_pid = None
-        
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-            try:
-                if proc.info['cmdline'] and 'poller.py' in ' '.join(proc.info['cmdline']):
-                    process_running = True
-                    running_pid = proc.info['pid']
-                    break
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        
-        # Calculate time until next run if we have status data
-        minutes_until_next = None
-        next_run_formatted = None
-        
-        if status_data.get('next_run_time'):
-            try:
-                next_run = datetime.fromisoformat(status_data['next_run_time'].replace('Z', '+00:00'))
-                current_time = datetime.now()
-                time_diff = next_run - current_time
-                minutes_until_next = max(0, int(time_diff.total_seconds() / 60))
-                next_run_formatted = next_run.strftime('%H:%M:%S')
-            except:
-                pass
-        
-        # Get config for poll interval
-        sheets_service = SheetsManagementService(current_app.db_manager)
-        config = sheets_service.get_config()
-        poll_interval = config.get('poll_interval', 2) if config else 2
-        
-        result = {
-            'success': True,
-            'process_running': process_running,
-            'running_pid': running_pid,
-            'poll_interval_minutes': poll_interval,
-            'status_file_exists': os.path.exists(status_file),
-            'minutes_until_next_run': minutes_until_next,
-            'next_run_time': next_run_formatted,
-            'status_data': status_data
-        }
-        
-        # Create status message
-        if process_running:
-            if minutes_until_next is not None:
-                result['status_message'] = f"Running - next poll in {minutes_until_next} minutes at {next_run_formatted}"
-            else:
-                result['status_message'] = f"Running - polling every {poll_interval} minutes"
-        else:
-            result['status_message'] = "Stopped"
-        
-        return jsonify(result)
-        
-    except Exception as e:
-        logger.error(f"Failed to get detailed service status: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
 
 
 @dashboard_bp.route('/api/sheets/test-connection', methods=['GET'])
