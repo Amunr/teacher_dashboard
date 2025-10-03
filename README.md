@@ -1,84 +1,144 @@
-# KEF - Student Assessment Dashboard
+# KEF Teacher Dashboard
 
-A comprehensive Flask web application for managing student assessments and educational layouts.
+A comprehensive Flask web application for managing student assessments with Google Sheets integration and automated background polling.
 
 ## 🏗️ Project Structure
 
 ```
 KEF/
-├── app/                    # Main application package
-│   ├── __init__.py        # Application factory
-│   ├── models/            # Database models and data access
+├── app/                          # Main application package
+│   ├── __init__.py              # Application factory and initialization
+│   ├── models/                  # Database models and data access
 │   │   ├── __init__.py
-│   │   └── database.py    # Database models and operations
-│   ├── routes/            # Route blueprints
+│   │   └── database.py          # Database models and operations
+│   ├── routes/                  # Route blueprints
 │   │   ├── __init__.py
-│   │   ├── dashboard.py   # Dashboard routes
-│   │   └── layout.py      # Layout management routes
-│   ├── services/          # Business logic layer
+│   │   ├── dashboard.py         # Dashboard and API routes
+│   │   └── layout.py            # Layout management routes
+│   ├── services/                # Business logic layer
 │   │   ├── __init__.py
-│   │   └── layout_service.py
-│   └── utils/             # Utility functions and helpers
+│   │   ├── background_poller.py # Background Google Sheets polling
+│   │   ├── dashboard_service.py # Dashboard data processing
+│   │   ├── layout_service.py    # Layout management logic
+│   │   └── sheets_service.py    # Google Sheets integration
+│   └── utils/                   # Utility functions and helpers
 │       ├── __init__.py
-│       ├── exceptions.py  # Custom exceptions
-│       ├── validators.py  # Data validation
-│       └── helpers.py     # Helper functions
-├── config/                # Configuration management
+│       ├── exceptions.py        # Custom exceptions
+│       ├── helpers.py           # Helper functions
+│       └── validators.py        # Data validation
+├── config/                      # Configuration management
 │   ├── __init__.py
-│   └── config.py         # Environment configurations
-├── templates/             # Jinja2 templates
-│   ├── layout.html       # Base template
-│   ├── homepage.html     # Dashboard homepage
-│   ├── layout_view.html  # Layout list view
-│   ├── layout_viewer.html # Layout detail view
-│   ├── layout_builder.html # Layout creation/editing
-│   ├── layout_updater.html # Layout in-place editing
-│   └── error.html        # Error page template
-├── static/               # Static assets
+│   └── config.py               # Environment configurations
+├── static/                     # Static assets
 │   └── js/
-│       └── chart.js
-├── logs/                 # Application logs (created automatically)
-├── run.py               # Application entry point
-├── requirements.txt     # Python dependencies
-├── .env.example        # Environment configuration template
-├── .gitignore          # Git ignore rules
-└── README.md           # This file
+│       └── chart.js           # Dashboard charting
+├── templates/                  # Jinja2 templates
+│   ├── layout.html            # Base template
+│   ├── homepage.html          # Dashboard homepage
+│   ├── layout_*.html          # Layout management pages
+│   └── error.html             # Error page template
+├── tests.py                   # Comprehensive test suite
+├── clear_responses.py         # Database maintenance utility
+├── run.py                     # Application entry point
+├── requirements.txt           # Python dependencies
+├── data.db                    # SQLite database
+├── .env.example              # Environment configuration template
+└── .gitignore                # Git ignore rules
 ```
 
 ## 🚀 Features
 
 ### Core Functionality
-- **Layout Management**: Create, edit, update, and delete assessment layouts
-- **Dashboard**: Student assessment overview and metrics
-- **Data Validation**: Comprehensive input validation and sanitization
-- **Error Handling**: Robust error handling with user-friendly messages
-- **Logging**: Comprehensive application logging for monitoring and debugging
+- **Student Assessment Dashboard**: Real-time metrics and analytics
+- **Google Sheets Integration**: Automatic data import with background polling
+- **Layout Management**: Create and manage assessment layouts
+- **Maintenance Interface**: Service management and data monitoring
+- **Background Processing**: Automated polling with configurable intervals
 
 ### Technical Features
-- **MVC Architecture**: Clean separation of concerns with models, views, and controllers
-- **Blueprint Organization**: Modular route organization using Flask blueprints
-- **Service Layer**: Business logic separated from route handlers
-- **Database Abstraction**: Clean database operations with connection pooling
-- **Configuration Management**: Environment-based configuration system
-- **Security**: Input sanitization, CSRF protection ready, security headers
-- **Type Hints**: Full type annotation for better code maintainability
+- **Flask-based Architecture**: Clean MVC pattern with blueprints
+- **Background Threading**: In-app polling system (no external processes)
+- **Real-time Status Updates**: Service monitoring with countdown timers
+- **Database Management**: SQLite with migration support
+- **Configuration-driven**: Environment-based settings
+- **Security**: Input sanitization and security headers
+- **Comprehensive Logging**: Application monitoring and debugging
 
-## 🛠️ Installation
+## 🛠️ Installation & Setup
 
 ### Prerequisites
 - Python 3.8 or higher
 - pip (Python package installer)
 
-### Setup Steps
+### Quick Start
 
-1. **Clone the repository**
+1. **Clone and setup**
    ```bash
    git clone <repository-url>
    cd KEF
+   python -m venv venv
+   venv\Scripts\activate  # Windows
+   # or: source venv/bin/activate  # macOS/Linux
    ```
 
-2. **Create virtual environment**
+2. **Install dependencies**
    ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Configure environment**
+   ```bash
+   copy .env.example .env  # Windows
+   # or: cp .env.example .env  # macOS/Linux
+   # Edit .env with your settings
+   ```
+
+4. **Initialize database**
+   ```bash
+   python run.py  # This will create and initialize the database
+   ```
+
+5. **Access the application**
+   - Open browser to `http://localhost:5000`
+   - Access maintenance interface at `http://localhost:5000/maintenance`
+
+## 🔧 Configuration
+
+### Environment Variables (.env)
+```env
+FLASK_ENV=development
+FLASK_DEBUG=True
+DATABASE_URL=sqlite:///data.db
+SECRET_KEY=your-secret-key-here
+GOOGLE_SHEETS_URL=your-google-sheets-csv-url
+```
+
+### Google Sheets Setup
+1. Make your Google Sheet public for CSV export
+2. Get the CSV export URL
+3. Configure it in the maintenance interface or .env file
+
+## 🎯 Usage
+
+### Running the Application
+```bash
+python run.py
+```
+
+### Background Polling Service
+The application includes an integrated background polling service:
+
+1. **Start Service**: Use the maintenance interface to start automatic polling
+2. **Configure Interval**: Set polling frequency (default: 5 minutes)
+3. **Monitor Status**: View real-time status and next poll countdown
+4. **Manual Import**: Force immediate data import from Google Sheets
+
+### Maintenance Operations
+Access `/maintenance` for:
+- Service start/stop controls
+- Data import statistics
+- Failed import monitoring
+- Database cleanup utilities
    python -m venv venv
    ```
 
@@ -267,57 +327,137 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 COPY . .
 EXPOSE 5000
-CMD ["python", "run.py"]
+## 🧪 Testing
+
+### Run All Tests
+```bash
+python tests.py
 ```
+
+### Run Specific Tests
+```bash
+python tests.py database_connection
+python tests.py sheets_integration
+python tests.py grade_assessment_fix
+python tests.py all
+```
+
+### Available Tests
+- `database_connection` - Database connectivity and tables
+- `date_logic` - Date handling and validation
+- `response_data_integrity` - Data validation and integrity
+- `layout_functionality` - Layout management features
+- `sheets_integration` - Google Sheets import/export
+- `dashboard_service` - Dashboard data processing
+- `grade_assessment_fix` - Grade assessment calculations
+- `polling_service_status` - Background polling service
+- `sheets_configuration` - Google Sheets configuration
+- `metadata_mapping` - Data mapping validation
+
+## 🔒 Security Features
+
+- **Input Sanitization**: All user inputs validated and sanitized
+- **Security Headers**: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection
+- **Session Security**: Secure session configuration
+- **SQL Injection Prevention**: Parameterized queries only
+- **CSRF Protection**: Ready for CSRF token implementation
+
+## 📊 Database Management
+
+### Clear Response Data
+```bash
+python clear_responses.py
+```
+
+### Database Structure
+- **layouts**: Assessment layout definitions
+- **questions**: Question metadata and mappings
+- **responses**: Student response data
+- **student_counts**: Enrollment statistics
+- **sheets_config**: Google Sheets configuration
+- **failed_imports**: Import error tracking
+
+## � Deployment
+
+### Production Setup
+1. **Set production environment**
+   ```env
+   FLASK_ENV=production
+   FLASK_DEBUG=False
+   ```
+
+2. **Use production WSGI server**
+   ```bash
+   pip install gunicorn
+   gunicorn -w 4 -b 0.0.0.0:5000 run:app
+   ```
+
+3. **Configure reverse proxy** (nginx example)
+   ```nginx
+   location / {
+       proxy_pass http://127.0.0.1:5000;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+   }
+   ```
+
+### Docker Deployment (Optional)
+```dockerfile
+FROM python:3.9-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+EXPOSE 5000
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "run:app"]
+```
+
+## 📝 API Documentation
+
+### Key Endpoints
+- `GET /` - Dashboard homepage
+- `GET /maintenance` - Maintenance interface
+- `POST /api/sheets/service/start` - Start polling service
+- `POST /api/sheets/service/stop` - Stop polling service
+- `GET /api/sheets/service/status` - Get service status
+- `POST /api/sheets/import` - Manual data import
+- `GET /api/sheets/stats` - Dashboard statistics
+
+## 🔍 Monitoring & Logging
+
+### Application Logs
+- **Development**: Console output
+- **Production**: File-based logging with rotation
+
+### Service Monitoring
+- Real-time service status in maintenance interface
+- Background polling health checks
+- Import success/failure tracking
+- Performance metrics
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Commit changes: `git commit -am 'Add feature'`
-4. Push to branch: `git push origin feature-name`
-5. Submit pull request
-
-### Code Style
-- Follow PEP 8 guidelines
-- Use type hints
-- Add docstrings to functions
-- Write meaningful commit messages
-
-## 📈 Performance Optimization
-
-- Database connection pooling enabled
-- Efficient query patterns
-- Minimal template rendering overhead
-- Static file caching headers
-
-## 🐛 Troubleshooting
-
-### Common Issues
-1. **Database locked**: Ensure no other processes are using the database
-2. **Port already in use**: Change the port in configuration
-3. **Template not found**: Check template paths in blueprint registration
-4. **Import errors**: Verify Python path and virtual environment activation
-
-### Debug Mode
-Enable debug mode for detailed error information:
-```bash
-set FLASK_DEBUG=True  # Windows
-export FLASK_DEBUG=True  # macOS/Linux
-```
-
-## 📞 Support
-
-For support and questions:
-- Create an issue in the repository
-- Check the logs for error details
-- Review the configuration settings
+2. Create a feature branch
+3. Make your changes
+4. Run tests: `python tests.py`
+5. Submit a pull request
 
 ## 📄 License
 
-[Add your license information here]
+[Specify your license here]
 
-## 🔄 Version History
+## 🆘 Support
+
+For issues and support:
+1. Check the maintenance interface for service status
+2. Run `python tests.py` to verify system health
+3. Check application logs for detailed error information
+4. Review the Google Sheets URL configuration
+
+---
+
+**Ready for Production**: This application is deployment-ready with integrated background services, comprehensive testing, and production configurations.
 
 - **v2.0.0**: Complete restructure with MVC architecture, blueprints, and enhanced security
 - **v1.0.0**: Initial Flask application with basic layout management 
