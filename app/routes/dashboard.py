@@ -15,16 +15,7 @@ logger = logging.getLogger(__name__)
 dashboard_bp = Blueprint('dashboard', __name__)
 
 
-@dashboard_bp.route('/test')
-def test_dashboard():
-    """Test dashboard page."""
-    return send_from_directory('.', 'test_dashboard.html')
 
-
-@dashboard_bp.route('/debug')
-def debug_dashboard():
-    """Debug dashboard page."""
-    return render_template('debug_dashboard.html')
 
 
 @dashboard_bp.route('/')

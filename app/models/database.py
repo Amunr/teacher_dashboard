@@ -700,13 +700,13 @@ class ResponseModel:
             with self.db.get_connection() as conn:
                 today = date.today()
                 
-                # Set default date range to last 365 days if not provided
+                # Set default date range to a wider range if not provided to include all data
                 if not filters:
                     filters = {}
                 if 'start_date' not in filters:
-                    filters['start_date'] = date(today.year - 1, today.month, today.day)
+                    filters['start_date'] = date(today.year - 3, today.month, today.day)  # 3 years back
                 if 'end_date' not in filters:
-                    filters['end_date'] = today
+                    filters['end_date'] = date(today.year + 1, today.month, today.day)  # 1 year forward
                 
                 # Build base query for valid responses
                 base_query = select(
@@ -776,6 +776,12 @@ class ResponseModel:
                 total_students = self._get_total_students_for_date_range(
                     conn, filters['start_date'], filters['end_date']
                 )
+                
+                # If no manual count exists, we should still show the assessed students count
+                # Don't count all responses - that's wrong. Use student_counts table or assessed students.
+                if total_students == 0:
+                    total_students = total_students_assessed
+                    logger.info(f"No manual student count found, using assessed students count: {total_students}")
                 
                 # Calculate scores by res_id
                 res_scores = {}
@@ -990,6 +996,7 @@ class ResponseModel:
     def _get_total_students_for_date_range(self, conn, start_date: date, end_date: date) -> int:
         """
         Get manual total student count for a date range.
+        If no manual count exists, fall back to counting unique students from responses.
         
         Args:
             conn: Database connection
@@ -1000,13 +1007,30 @@ class ResponseModel:
             Total student count
         """
         try:
+            # First try to get manual student count
             query = select(self.db.student_counts_table.c.total_students).where(
                 (self.db.student_counts_table.c.start_date <= start_date) &
                 (self.db.student_counts_table.c.end_date >= end_date)
             ).order_by(self.db.student_counts_table.c.end_date.desc()).limit(1)
             
             result = conn.execute(query).fetchone()
-            return result[0] if result else 0
+            if result:
+                return result[0]
+            
+            # Fallback: count unique students from responses in the date range
+            logger.info(f"No manual student count found, counting unique students from responses")
+            
+            # Count unique students (res-id) regardless of how many responses they have
+            unique_students_query = select(func.count(func.distinct(self.db.responses_table.c['res-id']))).where(
+                (self.db.responses_table.c.Date >= start_date) &
+                (self.db.responses_table.c.Date <= end_date)
+            )
+            
+            unique_result = conn.execute(unique_students_query).fetchone()
+            unique_count = unique_result[0] if unique_result else 0
+            
+            logger.info(f"Found {unique_count} unique students (not responses) in date range {start_date} to {end_date}")
+            return unique_count
             
         except Exception as e:
             logger.warning(f"Failed to get total student count: {e}")

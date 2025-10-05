@@ -64,14 +64,16 @@ class DashboardService:
             normalized_filters = self._normalize_filters(filters or {})
             offset = (page - 1) * per_page
             
-            # Get responses with pagination
+            # Get responses with filtering applied
+            # If student name filter is applied, get more data to ensure we have enough students
+            limit_multiplier = 50 if 'student_name' in normalized_filters else 10
             responses = self.response_model.get_responses(
                 filters=normalized_filters,
-                limit=per_page * 10,  # Get more to aggregate by student
+                limit=per_page * limit_multiplier,
                 offset=0
             )
             
-                # Group responses by student (res_id)
+            # Group responses by student (res_id)
             student_data = {}
             domain_questions = {}
             
@@ -320,13 +322,16 @@ class DashboardService:
             elif isinstance(filters['end_date'], date):
                 normalized['end_date'] = filters['end_date']
         
-        # Set default date range to last 365 days if not provided
+        # Set default date range to a wider range if not provided
+        # Only set defaults for dashboard data, not for student list filtering
         if 'start_date' not in normalized or 'end_date' not in normalized:
             today = date.today()
             if 'start_date' not in normalized:
-                normalized['start_date'] = today - timedelta(days=365)
+                # Use a wider date range to include more data
+                normalized['start_date'] = today - timedelta(days=365*3)  # 3 years back
             if 'end_date' not in normalized:
-                normalized['end_date'] = today
+                # Extend to future to include upcoming assessments
+                normalized['end_date'] = today + timedelta(days=365)  # 1 year forward
         
         # Handle string filters
         string_filters = ['school', 'grade', 'teacher', 'assessment', 'student_name', 'domain']
